@@ -7,17 +7,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
     parser.add_argument('--rules' , type=str, help = 'Path to the rules file')
     parser.add_argument('--mat', type=str, help = 'Path to the materialized directory')
+    parser.add_argument('--out', type=str, help = 'Name of the query output file')
 
     return parser.parse_args()
 
 
-'''
-class Rule
-
-Rule name
-arity (1,2,...)
-predicate
-'''
+outFile = ""
 
 def generateQueries(rule, arity, resultRecords):
 
@@ -27,7 +22,7 @@ def generateQueries(rule, arity, resultRecords):
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
     query = "?" + rule + "("
-    for i in range(arity-1):
+    for i in range(arity):
         query += chr(i+65)
         if (i != arity-1):
             query += ","
@@ -72,7 +67,7 @@ def generateQueries(rule, arity, resultRecords):
     for q,t in zip(queries, types):
         data += q + " " + str(t) + "\n"
 
-    with open(rule + ".queries", 'w') as fout:
+    with open(outFile + ".queries", 'a') as fout:
         fout.write(data)
 
 
@@ -100,20 +95,26 @@ Takes rule file and rule names array as the input
 For every rule checks if we got any resul
 '''
 def parseRulesFile(rulesFile, rulesWithResult):
+    exploredRules = set()
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
             head = line.split(':')[0]
             body = line.split('-')[1]
-            name = head.split('(')[0]
-            if name in rulesWithResult:
+            rule = head.split('(')[0]
+            if rule in exploredRules:
+                continue
+            exploredRules.add(rule)
+            if rule in rulesWithResult:
                 print (head, "=>", body)
-                parseResultFile(name, rulesWithResult[name])
+                parseResultFile(rule, rulesWithResult[rule])
 
 def main(args):
 
     resultFiles = []
     rulesFile = args.rules
+    global outFile
+    outFile = args.out
     rulesWithResult = dict()
     matDir = args.mat
     for root, dirs, files in os.walk(os.path.abspath(matDir)):
