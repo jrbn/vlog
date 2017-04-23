@@ -119,8 +119,8 @@ bool checkParams(po::variables_map &vm, int argc, const char** argv,
     } else {
         /*** Check specific parameters ***/
         if (cmd == "query" || cmd == "queryLiteral") {
-	    string queryFile = vm["query"].as<string>();
-            if (queryFile != "" && !fs::exists(queryFile)) {
+            string queryFile = vm["query"].as<string>();
+            if (cmd == "query" && (queryFile == ""  || !fs::exists(queryFile))) {
                 printErrorMsg(
                         (string("The file ") + queryFile
                          + string(" doesn't exist.")).c_str());
@@ -222,6 +222,8 @@ bool initParams(int argc, const char** argv, po::variables_map &vm) {
             "Activate reasoning during query answering using the rules defined at this path. It is REQUIRED in case the command is <mat>. Default is '' (disabled).");
     query_options.add_options()("reasoningThreshold", po::value<long>()->default_value(1000000),
             "This parameter sets a threshold to estimate the reasoning cost of a pattern. This cost can be broadly associated to the cardinality of the pattern. It is used to choose either TopDown or Magic evalution. Default is 1000000 (1M).");
+    query_options.add_options()("reasoningAlgo", po::value<string>()->default_value(""),
+            "Determines the reasoning algo (only for <queryLiteral>). Possible values are \"qsqr\", \"magic\", \"all\".");
     query_options.add_options()("matThreshold", po::value<long>()->default_value(10000000),
             "In case reasoning is activated, this parameter sets a threshold above which a full materialization is performed before we execute the query. Default is 10000000 (10M).");
     query_options.add_options()("automat",
@@ -479,8 +481,8 @@ void execSPARQLQuery(EDBLayer &edb, po::variables_map &vm) {
     Program p(edb.getNTerms(), &edb);
     string pathRules = vm["rules"].as<string>();
     if (pathRules != "") {
-	p.readFromFile(pathRules);
-	p.sortRulesByIDBPredicates();
+        p.readFromFile(pathRules);
+        p.sortRulesByIDBPredicates();
     }
 
     //Set up the ruleset and perform the pre-materialization if necessary
@@ -513,23 +515,23 @@ void execSPARQLQuery(EDBLayer &edb, po::variables_map &vm) {
 
     DBLayer *db = NULL;
     if (pathRules == "") {
-	PredId_t p = edb.getFirstEDBPredicate();
-	string typedb = edb.getTypeEDBPredicate(p);
-	if (typedb == "Trident") {
-	    auto edbTable = edb.getEDBTable(p);
-	    KB *kb = ((TridentTable*)edbTable.get())->getKB();
-	    TridentLayer *tridentlayer = new TridentLayer(*kb);
-	    tridentlayer->disableBifocalSampling();
-	    db = tridentlayer;
-	}
+        PredId_t p = edb.getFirstEDBPredicate();
+        string typedb = edb.getTypeEDBPredicate(p);
+        if (typedb == "Trident") {
+            auto edbTable = edb.getEDBTable(p);
+            KB *kb = ((TridentTable*)edbTable.get())->getKB();
+            TridentLayer *tridentlayer = new TridentLayer(*kb);
+            tridentlayer->disableBifocalSampling();
+            db = tridentlayer;
+        }
     }
     if (db == NULL) {
-	if (pathRules == "") {
-	    // Use default rule
-	    p.readFromFile(pathRules);
-	    p.sortRulesByIDBPredicates();
-	}
-	db = new VLogLayer(edb, p, vm["reasoningThreshold"].as<long>(), "TI", "TE");
+        if (pathRules == "") {
+            // Use default rule
+            p.readFromFile(pathRules);
+            p.sortRulesByIDBPredicates();
+        }
+        db = new VLogLayer(edb, p, vm["reasoningThreshold"].as<long>(), "TI", "TE");
     }
     string queryFileName = vm["query"].as<string>();
     // Parse the query
@@ -636,13 +638,82 @@ cout.rdbuf(strm_buffer);
 }*/
 }
 
+void runLiteralQuery(EDBLayer &edb, string algo, Program &p, Literal &literal, Reasoner &reasoner, int times) {
+
+    boost::chrono::system_clock::time_point startQ1 = boost::chrono::system_clock::now();
+
+    TupleIterator *iter;
+    if (algo == "magic") {
+        iter = reasoner.getMagicIterator(literal, NULL, NULL, edb, p, true, NULL);
+    } else if (algo == "qsqr") {
+        iter = reasoner.getTopDownIterator(literal, NULL, NULL, edb, p, true, NULL);
+    } else {
+        iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
+    }
+    int sz = iter->getTupleSize();
+    long count = 0;
+    while (iter->hasNext()) {
+        iter->next();
+        count++;
+        for (int i = 0; i < sz; i++) {
+            char supportText[MAX_TERM_SIZE];
+            uint64_t value = iter->getElementAt(i);
+            if (i != 0) {
+                cout << ", ";
+            }
+            if (!edb.getDictText(value, supportText)) {
+                cerr << "Term " << value << " not found" << endl;
+                cout << value;
+            } else {
+                cout << supportText;
+            }
+        }
+        cout << endl;
+    }
+    boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
+    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
+
+    delete iter;
+    if (times > 0) {
+        // Redirect output
+        ofstream file("/dev/null");
+        streambuf* strm_buffer = cout.rdbuf();
+        cout.rdbuf(file.rdbuf());
+        boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
+        for (int j = 0; j < times; j++) {
+            TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
+            int sz = iter->getTupleSize();
+            while (iter->hasNext()) {
+                iter->next();
+                for (int i = 0; i < sz; i++) {
+                    char supportText[MAX_TERM_SIZE];
+                    uint64_t value = iter->getElementAt(i);
+                    if (i != 0) {
+                        cout << ", ";
+                    }
+                    if (!edb.getDictText(value, supportText)) {
+                        cout << value;
+                    } else {
+                        cout << supportText;
+                    }
+                }
+            }
+            cout << endl;
+        }
+        boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
+        //Restore stdout
+        cout.rdbuf(strm_buffer);
+        BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
+    }
+}
+
 void execLiteralQuery(EDBLayer &edb, po::variables_map &vm) {
     //Parse the rules and create a program
     Program p(edb.getNTerms(), &edb);
     string pathRules = vm["rules"].as<string>();
     if (pathRules != "") {
-	p.readFromFile(pathRules);
-	p.sortRulesByIDBPredicates();
+        p.readFromFile(pathRules);
+        p.sortRulesByIDBPredicates();
     }
 
     //Set up the ruleset and perform the pre-materialization if necessary
@@ -673,97 +744,27 @@ void execLiteralQuery(EDBLayer &edb, po::variables_map &vm) {
         }
     }
 
-    /*
-    DBLayer *db = NULL;
-    if (pathRules == "") {
-	PredId_t p = edb.getFirstEDBPredicate();
-	string typedb = edb.getTypeEDBPredicate(p);
-	if (typedb == "Trident") {
-	    auto edbTable = edb.getEDBTable(p);
-	    KB *kb = ((TridentTable*)edbTable.get())->getKB();
-	    TridentLayer *tridentlayer = new TridentLayer(*kb);
-	    tridentlayer->disableBifocalSampling();
-	    db = tridentlayer;
-	}
-    }
-    if (db == NULL) {
-	if (pathRules == "") {
-	    // Use default rule
-	    p.readFromFile(pathRules);
-	    p.sortRulesByIDBPredicates();
-	}
-	db = new VLogLayer(edb, p, vm["reasoningThreshold"].as<long>(), "TI", "TE");
-    }
-    */
-
-    string queryFileName = vm["query"].as<string>();
-    // Parse the query
-    std::fstream inFile;
-    inFile.open(queryFileName);//open the input file
     string query;
-    std::getline(inFile, query);
-    inFile.close();
+    string queryFileName = vm["query"].as<string>();
+    if (fs::exists(queryFileName)) {
+        // Parse the query
+        std::fstream inFile;
+        inFile.open(queryFileName);//open the input file
+        std::getline(inFile, query);
+        inFile.close();
+    } else {
+        query = queryFileName;
+    }
     Literal literal = p.parseLiteral(query);
-    boost::chrono::system_clock::time_point startQ1 = boost::chrono::system_clock::now();
     Reasoner reasoner(vm["reasoningThreshold"].as<long>());
-    TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
-    int sz = iter->getTupleSize();
-    long count = 0;
-    while (iter->hasNext()) {
-	iter->next();
-	count++;
-	for (int i = 0; i < sz; i++) {
-	    char supportText[MAX_TERM_SIZE];
-	    uint64_t value = iter->getElementAt(i);
-	    if (i != 0) {
-		cout << ", ";
-	    }
-	    if (!edb.getDictText(value, supportText)) {
-		cerr << "Term " << value << " not found" << endl;
-		cout << value;
-	    } else {
-		cout << supportText;
-	    }
-        }
-	cout << endl;
-    }
-    boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
-    BOOST_LOG_TRIVIAL(info) << "Query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-
-    delete iter;
+    string algo = vm["reasoningAlgo"].as<string>();
     int times = vm["repeatQuery"].as<int>();
-    if (times > 0) {
-	// Redirect output
-	ofstream file("/dev/null");
-	streambuf* strm_buffer = cout.rdbuf();
-	cout.rdbuf(file.rdbuf());
-	boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
-	for (int j = 0; j < times; j++) {
-	    TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
-	    int sz = iter->getTupleSize();
-	    while (iter->hasNext()) {
-		iter->next();
-		for (int i = 0; i < sz; i++) {
-		    char supportText[MAX_TERM_SIZE];
-		    uint64_t value = iter->getElementAt(i);
-		    if (i != 0) {
-			cout << ", ";
-		    }
-		    if (!edb.getDictText(value, supportText)) {
-			cout << value;
-		    } else {
-			cout << supportText;
-		    }
-		}
-	    }
-	    cout << endl;
-	}
-	boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
-	//Restore stdout
-	cout.rdbuf(strm_buffer);
-	BOOST_LOG_TRIVIAL(info) << "Repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
+    if (algo == "all") {
+        runLiteralQuery(edb, "qsqr", p, literal, reasoner, times);
+        runLiteralQuery(edb, "magic", p, literal, reasoner, times);
+    } else {
+        runLiteralQuery(edb, algo, p, literal, reasoner, times);
     }
-    // delete db;
 }
 
 int main(int argc, const char** argv) {
@@ -830,11 +831,11 @@ int main(int argc, const char** argv) {
         EDBLayer *layer = new EDBLayer(conf, false);
 
         //Execute the query
-	if (cmd == "query") {
-	    execSPARQLQuery(*layer, vm);
-	} else {
-	    execLiteralQuery(*layer, vm);
-	}
+        if (cmd == "query") {
+            execSPARQLQuery(*layer, vm);
+        } else {
+            execLiteralQuery(*layer, vm);
+        }
         delete layer;
     } else if (cmd == "lookup") {
         EDBConf conf(edbFile);
@@ -891,7 +892,7 @@ int main(int argc, const char** argv) {
             p.maxReadingThreads = vm["readThreads"].as<int>();
             p.dictionaries = ndicts;
             p.nindices = nindices;
-            p.createIndicesInBlocks = false;	// true not working???
+            p.createIndicesInBlocks = false;    // true not working???
             p.aggrIndices = aggrIndices;
             p.canSkipTables = canSkipTables;
             p.enableFixedStrat = enableFixedStrat;
@@ -908,16 +909,16 @@ int main(int argc, const char** argv) {
             loader->load(p);
 
             /*loader->load("rdf", onlyCompress, true, vm["comprinput"].as<string>(),
-                    vm["comprdict"].as<string>() , vm["output"].as<string>(),
-                    vm["output"].as<string>(),
-                    dictMethod, sampleMethod,
-                    popArg,
-                    vm["maxThreads"].as<int>(), vm["readThreads"].as<int>(),
-                    ndicts, nindices,
-                    true,
-                    aggrIndices, canSkipTables, enableFixedStrat,
-                    fixedStrat, storePlainList,
-                    sample, sampleRate, thresholdSkipTable, NULL, "", 0, "");*/
+              vm["comprdict"].as<string>() , vm["output"].as<string>(),
+              vm["output"].as<string>(),
+              dictMethod, sampleMethod,
+              popArg,
+              vm["maxThreads"].as<int>(), vm["readThreads"].as<int>(),
+              ndicts, nindices,
+              true,
+              aggrIndices, canSkipTables, enableFixedStrat,
+              fixedStrat, storePlainList,
+              sample, sampleRate, thresholdSkipTable, NULL, "", 0, "");*/
 
         } else {
             BOOST_LOG_TRIVIAL(info) << "Creating the KB from " << vm["input"].as<string>();
@@ -938,7 +939,7 @@ int main(int argc, const char** argv) {
             p.maxReadingThreads = vm["readThreads"].as<int>();
             p.dictionaries = ndicts;
             p.nindices = nindices;
-            p.createIndicesInBlocks = false;	// true not working???
+            p.createIndicesInBlocks = false;    // true not working???
             p.aggrIndices = aggrIndices;
             p.canSkipTables = canSkipTables;
             p.enableFixedStrat = enableFixedStrat;
@@ -951,22 +952,22 @@ int main(int argc, const char** argv) {
             p.remoteLocation = "";
             p.limitSpace = 0;
             p.graphTransformation = "";
-	    p.timeoutStats = 0;
-	    p.storeDicts = true;
+            p.timeoutStats = 0;
+            p.storeDicts = true;
 
             loader->load(p);
 
 
             /*loader->load("rdf", onlyCompress, false, vm["input"].as<string>(), "", vm["output"].as<string>(),
-                    vm["output"].as<string>(),
-                    dictMethod, sampleMethod,
-                    popArg,
-                    vm["maxThreads"].as<int>(), vm["readThreads"].as<int>(),
-                    ndicts, nindices,
-                    true,
-                    aggrIndices, canSkipTables, enableFixedStrat,
-                    fixedStrat, storePlainList,
-                    sample, sampleRate, thresholdSkipTable, NULL, "", 0, "");*/
+              vm["output"].as<string>(),
+              dictMethod, sampleMethod,
+              popArg,
+              vm["maxThreads"].as<int>(), vm["readThreads"].as<int>(),
+              ndicts, nindices,
+              true,
+              aggrIndices, canSkipTables, enableFixedStrat,
+              fixedStrat, storePlainList,
+              sample, sampleRate, thresholdSkipTable, NULL, "", 0, "");*/
         }
         delete loader;
     } else if (cmd == "server") {
