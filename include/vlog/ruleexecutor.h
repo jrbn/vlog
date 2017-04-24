@@ -77,7 +77,7 @@ private:
 
     size_t estimateRule(const int depth, const uint8_t bodyAtom,
                           BindingsTable **supplRelations,
-                          QSQR *qsqr, EDBLayer &layer);
+                          QSQR *qsqr, EDBLayer &layer, int &countRules, int &countIntQueries);
 
     void evaluateRule(const uint8_t bodyAtom, BindingsTable **supplRelations,
                       QSQR *qsqr, EDBLayer &layer
@@ -105,7 +105,7 @@ public:
                 );
 
     size_t estimate(const int depth, BindingsTable *input/*, size_t offsetInput*/, QSQR *qsqr,
-                      EDBLayer &edbLayer);
+                      EDBLayer &edbLayer, const int ruleno, int &countRules, int &countIntQueries);
 
     void evaluate(BindingsTable *input, size_t offsetInput, QSQR *qsqr,
                   EDBLayer &edbLayer

@@ -53,7 +53,7 @@ public:
 
     size_t estimate(Literal &query, std::vector<uint8_t> *posBindings,
                     std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                    Program &program);
+                    Program &program, bool queryEstimate);
 
     TupleIterator *getIterator(Literal &query,
                                            std::vector<uint8_t> * posJoins,
