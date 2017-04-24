@@ -210,14 +210,14 @@ void Reasoner::cleanBindings(std::vector<Term_t> &possibleValuesJoins, std::vect
 
 size_t Reasoner::estimate(Literal &query, std::vector<uint8_t> *posBindings,
                           std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                          Program &program) {
+                          Program &program, bool queryEstimate) {
 
     QSQQuery rootQuery(query);
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
                                           new QSQR(layer, &program));
     TupleTable *cardTable = NULL;
     cardTable = evaluator->evaluateQuery(QSQR_EST, &rootQuery,
-                                         posBindings, valueBindings, true);
+                                         posBindings, valueBindings, true, queryEstimate);
     size_t estimate = cardTable->getRow(0)[0];
     delete cardTable;
     return estimate;
@@ -442,7 +442,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
 
                 //Launch only the single rule
                 TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &rootQuery, &newPosJoins,
-                                       possibleValuesJoins, returnOnlyVars);
+                                       possibleValuesJoins, returnOnlyVars, false);
 
                 if (tmpTable != NULL) {
                     //Clean the bindings
@@ -783,7 +783,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
 	// Fixed adornments in predicate of literal below.
 	Predicate pred1(query.getPredicate(), Predicate::calculateAdornment(newTuple));
         Literal newLiteral(pred1, newTuple);
-        size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program);
+        size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program,false);
         BOOST_LOG_TRIVIAL(debug) << "SingleCost is " <<
                                  singleCost << " nBindings " << (valueBindings->size() / posBindings->size());
 
@@ -796,7 +796,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
                 limitedValueBindings.push_back(valueBindings->at(i));
             }
             uint64_t tenCost = estimate(query, posBindings,
-                                        &limitedValueBindings, layer, program);
+                                        &limitedValueBindings, layer, program,false);
             BOOST_LOG_TRIVIAL(debug) << "TenCost is " << tenCost;
 
             //y = mx + b. m is slope, b is constant.
@@ -808,7 +808,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
             cost = singleCost;
         }
     } else {
-        cost = estimate(query, NULL, NULL, layer, program);
+        cost = estimate(query, NULL, NULL, layer, program, true);
     }
     ReasoningMode mode = cost < threshold ? TOPDOWN : MAGIC;
     BOOST_LOG_TRIVIAL(debug) << "Deciding whether I should resolve " <<
@@ -885,7 +885,7 @@ TupleIterator *Reasoner::getTopDownIterator(Literal &query,
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(new QSQR(edb, &program));
     TupleTable *finalTable;
     finalTable = evaluator->evaluateQuery(QSQR_EVAL, &rootQuery, newPosJoins.size() > 0 ? &newPosJoins : NULL,
-                                          possibleValuesJoins, returnOnlyVars);
+                                          possibleValuesJoins, returnOnlyVars,false);
 
     //Return an iterator of the bindings
     std::shared_ptr<TupleTable> pFinalTable(finalTable);

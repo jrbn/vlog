@@ -177,7 +177,7 @@ bool Materialization::evaluateQueryThreadedVersion(EDBLayer *kb,
         // }
         BOOST_LOG_TRIVIAL(debug) << "Installed alarm signal handler; Now setting alarm over " << timeoutMicros << " usec";
         ualarm((useconds_t)timeoutMicros, (useconds_t)timeoutMicros); //Wait one second
-        TupleTable *tmpTable = qsqr->evaluateQuery(QSQR_EVAL, q, NULL, NULL, true);
+        TupleTable *tmpTable = qsqr->evaluateQuery(QSQR_EVAL, q, NULL, NULL, true, false);
         //After the query is computed, I don't care anymore of the alarm
         signal(SIGALRM, SIG_IGN);
 
@@ -258,7 +258,7 @@ bool Materialization::execMatQuery(Literal &l, bool timeout, EDBLayer &kb,
     if (!timeout || timeoutMicros == 0) {
         QSQR *qsqr = new QSQR(kb, &p);
         output = qsqr->evaluateQuery(QSQR_EVAL, &q, NULL, NULL,
-                                     true);
+                                     true, false);
         delete qsqr;
     } else {
         failed = !evaluateQueryThreadedVersion(&kb, &p, &q,

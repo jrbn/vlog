@@ -48,7 +48,7 @@ public:
 
     size_t estimate(Literal &query, std::vector<uint8_t> *posBindings,
                     std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                    Program &program);
+                    Program &program, bool queryEstimate);
 
     ReasoningMode chooseMostEfficientAlgo(Literal &query,
                                           EDBLayer &layer, Program &program,
