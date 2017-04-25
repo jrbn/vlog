@@ -1,7 +1,9 @@
 import os
+import subprocess
 import sys
 import argparse
 from collections import defaultdict
+from random import shuffle
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
@@ -17,7 +19,7 @@ outFile = ""
 def generateQueries(rule, arity, resultRecords):
 
     queries = []
-    types = []
+    #types = []
 
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
@@ -27,8 +29,7 @@ def generateQueries(rule, arity, resultRecords):
         if (i != arity-1):
             query += ","
     query += ")"
-    queries.append(query)
-    types.append(100 + len(resultRecords))
+    queries.append((query, 100 + len(resultRecords)))
 
     # Queries by replacing each variable by a constant
         # We use variable for i and constants for other columns from result records
@@ -46,8 +47,13 @@ def generateQueries(rule, arity, resultRecords):
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
-                queries.append(query)
-                types.append(i+1)
+
+                # Fix the number of types
+                # If step count is >3, write 50 as the query type
+                if (i > 3):
+                    queries.append((query, 50))
+                else:
+                    queries.append((query, i+1))
 
     # Boolean queries 
     for i, key in enumerate(sorted(resultRecords)):
@@ -60,12 +66,34 @@ def generateQueries(rule, arity, resultRecords):
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
-                queries.append(query)
-                types.append(1000 + i + 1)
+                queries.append((query, 1000 + i + 1))
 
-    data = ""
-    for q,t in zip(queries, types):
-        data += q + " " + str(t) + "\n"
+    shuffle(queries)
+    data = "Query Type QSQR MagicSets"
+    iterations = 1
+    for q in queries:
+        iterations += 1
+        if iterations == 10:
+            break
+        # Here invoke vlog and execute query and get the runtime
+        processQSQR = subprocess.Popen(['../vlog', 'queryLiteral' ,'-e','edb.conf', '--rules', 'dlog/LUBM1_LE.dlog', '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q[0]], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        outQSQR, errQSQR = processQSQR.communicate()
+
+        strQSQR = str(errQSQR)
+        index = strQSQR.find("Runtime")
+        timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds")-1]
+
+        processMagic = subprocess.Popen(['../vlog', 'queryLiteral' ,'-e','edb.conf', '--rules', 'dlog/LUBM1_LE.dlog', '--reasoningAlgo', 'magic', '-l', 'info', '-q', q[0]], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        outMagic, errMagic = processMagic.communicate()
+
+        strMagic = str(errMagic)
+        index = strMagic.find("Runtime")
+        timeMagic = strMagic[index+10:strMagic.find("milliseconds")-1]
+
+        record = str(q[0]) + " " + str(q[1]) + " " + str(timeQSQR) + " " + str(timeMagic)
+
+        print (record)
+        data += record
 
     with open(outFile + ".queries", 'a') as fout:
         fout.write(data)
@@ -88,7 +116,7 @@ def parseResultFile(name, resultFile):
             results[int(columns[0])].append(operands)
 
     generateQueries(name, arity, results)
-    print (len(results))
+    #print (len(results))
 
 '''
 Takes rule file and rule names array as the input
@@ -106,7 +134,7 @@ def parseRulesFile(rulesFile, rulesWithResult):
                 continue
             exploredRules.add(rule)
             if rule in rulesWithResult:
-                print (head, "=>", body)
+                #print (head, "=>", body)
                 parseResultFile(rule, rulesWithResult[rule])
 
 def main(args):
@@ -124,7 +152,7 @@ def main(args):
             ruleResultFilePath = os.path.join(root, f)
             rulesWithResult[f] = ruleResultFilePath
             resultFiles.append(ruleResultFilePath)
-            print (f)
+            #print (f)
 
     parseRulesFile(rulesFile, rulesWithResult)
 
