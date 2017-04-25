@@ -1,10 +1,12 @@
 #!/bin/sh
 
-rm -rf indexDir materialization_lubm1
+# This script only works on DAS5, because the location of the dataset is on das5
+
+rm -rf indexDir_1000 materialization_lubm1_1000
 
 # load the database in the ttl directory, creating the index in "indexDir".
 echo "========================"
-../vlog load -i /Users/unmesh/kbs/lubm_1000/ -o indexDir-1000 2>&1
+../vlog load -i /var/scratch/jurbani/datasets/rdf/LUBM/lubm_1000/ -o indexDir_1000 2>&1
 echo "========================"
 
 #materialize using the LUBM1_LE rules and store the result in "materialization_lubm1".
