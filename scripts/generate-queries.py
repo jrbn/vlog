@@ -43,7 +43,7 @@ def generateQueries(rule, arity, resultRecords):
                         query += chr(i+65)
                     else:
                         query += column
-                    
+
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
@@ -99,9 +99,29 @@ def generateQueries(rule, arity, resultRecords):
         fout.write(data)
 
 
+def blocks(fileObject, size=65536):
+    while True:
+        b = fileObject.read(size)
+        if not b:
+            break
+        yield b
+
+
+def isFileTooBig(fileName):
+    with open(fileName, "r") as fileObject:
+        lineCount = sum(block.count("\n") for block in blocks(fileObject))
+
+    if lineCount > 1000000:
+        return True
+    return False
+
 def parseResultFile(name, resultFile):
+    print (name)
     results = defaultdict(list)
     arity = 0
+    if isFileTooBig(resultFile):
+        print (resultFile, " is too big")
+        return
     with open(resultFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
