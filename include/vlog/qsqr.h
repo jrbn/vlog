@@ -114,7 +114,7 @@ public:
         return getAnswerTable(literal->getPredicate(), literal->getPredicate().getAdorment());
     }
 
-    size_t estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries);
+    size_t estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries,std::vector<Rule> &execRules, bool queryEstimate);
 
 #ifdef LINEAGE
     TupleTable *evaluateQuery(QSQQuery *query,

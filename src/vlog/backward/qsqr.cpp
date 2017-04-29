@@ -132,7 +132,7 @@ void QSQR::createRules(Predicate &pred) {
     }
 }
 
-size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries) {
+size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries, std::vector<Rule> &execRules, bool queryEstimate) {
 
     if (depth > 2) {
         return 0;
@@ -143,7 +143,7 @@ size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, s
     size_t output = 0;	
     for (int i = 0; i < program->getAllRulesByPredicate(pred.getId())->size(); ++i) {
         RuleExecutor *exec = rules[pred.getId()][pred.getAdorment()][i];
-        size_t r = exec->estimate(depth + 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries);
+        size_t r = exec->estimate(depth + 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries,execRules,queryEstimate);
 	//BOOST_LOG_TRIVIAL(info) << "Rule" << i << "\n" << "counter" << dCounter;
 	if (r != 0) {
 	    // if (depth > 0 || r <= 10) {
@@ -268,6 +268,7 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
     Predicate pred = query->getLiteral()->getPredicate();
     int countRules =0;
     int countIntQueries =0;
+    std::vector<Rule> execRules; 
     if (pred.getType() == EDB) {
         if (evaluateOrEstimate == QSQR_EVAL) {
             uint8_t nvars = query->getLiteral()->getNVars();
@@ -336,7 +337,7 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
 
                 } else {
 		    TupleTable *output = new TupleTable(1);
-                    uint64_t est = estimate(0, pred2, inputTable/*, 0*/,countRules,countIntQueries);
+                    uint64_t est = estimate(0, pred2, inputTable/*, 0*/,countRules,countIntQueries,execRules,queryEstimate);
 		    // Incorporate size of possible join values?
 		    // Useless, I think, because in the planning phase, we don't actually have more than
 		    // one possiblevaluesjoin. --Ceriel
@@ -360,14 +361,16 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
                         processTask(task);
                     }
 #endif
-
+		
                 } else { //ESTIMATE
                     TupleTable *output = new TupleTable(1);
-		    uint64_t est = estimate(0, pred, inputTable/*, 0*/,countRules, countIntQueries);
+		    uint64_t est = estimate(0, pred, inputTable/*, 0*/,countRules, countIntQueries,execRules,queryEstimate);
 		    if (queryEstimate)
 		    {	
-		    	BOOST_LOG_TRIVIAL(info) << "No of Rules executed" << countRules;
+		    	BOOST_LOG_TRIVIAL(info) << "No of Rules Executed(depth of 3) : " << countRules;
 		    	BOOST_LOG_TRIVIAL(info) << "No of Intermediate Queries" << countIntQueries;	
+			BOOST_LOG_TRIVIAL(info) << "No of Unique Rules" << execRules.size();
+	
                     }
 		    output->addRow(&est);
                     return output;
