@@ -240,7 +240,7 @@ bool RuleExecutor::isUnifiable(const Term_t * const value, const size_t sizeTupl
 }
 
 size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
-                                  BindingsTable **supplRelations, QSQR* qsqr, EDBLayer &layer, int &countRules, int &countIntQueries) {
+                                  BindingsTable **supplRelations, QSQR* qsqr, EDBLayer &layer, int &countRules, int &countIntQueries, std::vector<Rule> &execRules, bool queryEstimate) {
     TupleTable *retrievedBindings = NULL;
     int counter = 0;
     Literal l = adornedRule.getBody()[bodyAtom];
@@ -331,7 +331,7 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
         //if (table->getNTuples() > offsetInput) {
 	countIntQueries = countIntQueries + 1;
         Predicate pred = query.getLiteral()->getPredicate();
-        return qsqr->estimate(depth, pred, table/*, offsetInput*/, countRules, countIntQueries);
+        return qsqr->estimate(depth, pred, table/*, offsetInput*/, countRules, countIntQueries,execRules,queryEstimate);
         //} else {
         //    return 0;
         //}
@@ -463,7 +463,7 @@ void RuleExecutor::evaluateRule(const uint8_t bodyAtom,
 
         //Call the query if there are new queries
         if (table->getNTuples() > offsetInput) {
-            Predicate pred = query.getLiteral()->getPredicate();
+	    Predicate pred = query.getLiteral()->getPredicate();
 #ifdef RECURSIVE_QSQR
             qsqr->evaluate(pred, table, offsetInput);
 #else
@@ -544,9 +544,10 @@ void RuleExecutor::printLineage(std::vector<LineageInfo> &lineage) {
 #endif
 
 size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t offsetInput,*/ QSQR * qsqr,
-                              EDBLayer &layer, const int ruleno,int &countRules, int &countIntQueries) {
+                              EDBLayer &layer, const int ruleno,int &countRules, int &countIntQueries,std::vector<Rule> &execRules, bool queryEstimate) {
     BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(NULL,NULL) << ", depth = " << depth;
     size_t output = 0;
+    bool exists = true;
     //if (input->getNTuples() > offsetInput) {
     //Get the new tuples. All the tuples that merge with the head of the
     //adorned rule are being copied in the first supplementary relation
@@ -559,8 +560,31 @@ size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t o
             supplRelations[0]->addTuple(tuple);	
         }
     }
-    	
     if (supplRelations[0]->getNTuples() > 0) {
+	// If estimate() is called to get query statistics, following code will populate the execRules to get the No of unique rules executed.
+	if (queryEstimate)
+        {
+		if (countRules == 0)
+		{
+			execRules.push_back(adornedRule);
+		}
+		std::vector<Rule> newRules = execRules;
+		for (std::vector<Rule>::iterator itr = newRules.begin(); itr != newRules.end(); itr++)
+		{
+			if (itr->getHead() == adornedRule.getHead() && itr->getBody() == adornedRule.getBody())
+			{
+			 exists = true;
+			 break;	
+			}
+			exists= false;
+					
+		}
+		if(!exists)
+		{
+			execRules.push_back(adornedRule);
+		}
+	}
+	// countRules holds the total number of rules executed for a input query( depth set as 3)
 	countRules = countRules + 1;
         uint8_t bodyAtomIdx = 0;
 	output = 1;
@@ -568,7 +592,8 @@ size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t o
             //BOOST_LOG_TRIVIAL(info) << "Atom " << (int) bodyAtomIdx;
 	    uint8_t nCurrentJoins = this->njoins[bodyAtomIdx];
 	    //BOOST_LOG_TRIVIAL(info) << ruleno;
-	    size_t r = estimateRule(depth, bodyAtomIdx, supplRelations, qsqr, layer,countRules, countIntQueries);
+	    size_t r = estimateRule(depth, bodyAtomIdx, supplRelations, qsqr, layer,countRules, countIntQueries
+, execRules, queryEstimate);
             if (nCurrentJoins != 0) {
                 output = r;
             } else {
@@ -649,6 +674,7 @@ void RuleExecutor::evaluate(BindingsTable * input, size_t offsetInput,
 
         size_t cnt = supplRelations[0]->getNTuples();
         if (cnt > 0) {
+	
 #ifdef RECURSIVE_QSQR
             uint8_t bodyAtomIdx = 0;
             do {

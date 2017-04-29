@@ -753,7 +753,7 @@ TupleIterator *Reasoner::getTopDownIterator(Literal &query,
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(new QSQR(edb, &program));
     TupleTable *finalTable;
     finalTable = evaluator->evaluateQuery(QSQR_EVAL, &rootQuery, newPosJoins.size() > 0 ? &newPosJoins : NULL,
-                                          possibleValuesJoins, returnOnlyVars,false);
+                                          possibleValuesJoins, returnOnlyVars,true);
 
     //Return an iterator of the bindings
     std::shared_ptr<TupleTable> pFinalTable(finalTable);
