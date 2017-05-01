@@ -411,6 +411,9 @@ void SemiNaiver::storeOnFiles(std::string path, const bool decompress,
                     t->releaseIterator(iitr);
                     itr.moveNextCount();
                 }
+		if (streamout.fail()) {
+		    BOOST_LOG_TRIVIAL(error) << "Error writing to " << (path + "/" + program->getPredicateName(i));
+		}
                 streamout.close();
             }
         }
