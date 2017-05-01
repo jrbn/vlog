@@ -130,32 +130,15 @@ def parseRulesFile(rulesFile, rulesWithResult):
             head = line.split(':')[0]
             body = line.split('-')[1]
             rule = head.split('(')[0]
-            if rule in exploredRules:
-                continue
-            exploredRules.add(rule)
-            if rule in rulesWithResult:
-                #print (head, "=>", body)
-                parseResultFile(rule, rulesWithResult[rule])
 
-def main(args):
+            # Execute the body as a query using vlog and gather results
+            # If 0 rows are generated, then it means that the predicate of this rule is not present in the database (directly)
+            # and we need to recursively apply the rule. e.g. RP0 : <A, Colleague of, B> is not present in the database.
+            # But we can find RP0: RP29, RP30 in the rules file and RP29 and RP30 have the predicates that are present in the database.
 
-    resultFiles = []
-    rulesFile = args.rules
-    global outFile
-    outFile = args.out
-    rulesWithResult = dict()
-    dbDir = args.db
-    for root, dirs, files in os.walk(os.path.abspath(dbDir)):
-        for f in files:
-            if not f.startswith('R'):
-                continue
-            ruleResultFilePath = os.path.join(root, f)
-            rulesWithResult[f] = ruleResultFilePath
-            resultFiles.append(ruleResultFilePath)
-            #print (f)
+resultFiles = []
+rulesFile = args.rules
+outFile = args.out
 
-    parseRulesFile(rulesFile, rulesWithResult)
+parseRulesFile(rulesFile)
 
-if __name__ == "__main__":
-    args = parse_args()
-    main(args)
