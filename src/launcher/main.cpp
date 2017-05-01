@@ -941,6 +941,7 @@ int main(int argc, const char** argv) {
             p.remoteLocation = "";
             p.limitSpace = 0;
             p.graphTransformation = "";
+            p.storeDicts = true;
 
             loader->load(p);
 
