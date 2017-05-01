@@ -10,5 +10,5 @@ rm -rf  /var/scratch/uji300/vlog/materialization_lubm1_1000
 
 #materialize using the LUBM1_LE rules and store the result in "materialization_lubm1".
 echo "========================"
-../vlog mat -e edb-lubm.conf --storemat_path /var/scratch/uji300/vlog/materialization_lubm1_1000 --storemat_format files --rules $HOME/vlog/examples/rules/aaai2016/LUBM1_LE.dlog 2>&1
+../vlog mat -e edb-lubm.conf --storemat_path /var/scratch/uji300/vlog/materialization_lubm1_1000 --storemat_format files --decompressmat true --rules $HOME/vlog/examples/rules/aaai2016/LUBM_LE.dlog 2>&1
 echo "========================"

@@ -8,5 +8,5 @@ rm -rf  /var/scratch/uji300/vlog/materialization_dbpedia
 #echo "========================"
 
 echo "========================"
-../vlog mat -e edb-dbpedia.conf --storemat_path /var/scratch/uji300/vlog/materialization_dbpedia --storemat_format files --rules $HOME/vlog/examples/rules/aaai2016/DBpedia_L.dlog 2>&1
+../vlog mat -e edb-dbpedia.conf --storemat_path /var/scratch/uji300/vlog/materialization_dbpedia --storemat_format files --decompressmat true --rules $HOME/vlog/examples/rules/aaai2016/DBpedia_L.dlog 2>&1
 echo "========================"

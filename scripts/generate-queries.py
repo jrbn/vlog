@@ -8,9 +8,10 @@ from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired
 
 
-def generateQueries(rule, arity, resultRecords):
+def generateQueries(rule, arity, resultRecords, isClass):
 
     queries = {}
+    features= {}
 
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
@@ -21,6 +22,7 @@ def generateQueries(rule, arity, resultRecords):
             query += ","
     query += ")"
     queries[100+(len(resultRecords))] = [query]
+    features[query] = [0,0, isClass] # not subject bound, not object bound
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
@@ -32,13 +34,18 @@ def generateQueries(rule, arity, resultRecords):
                     query = rule + "("
                     for j, column in enumerate(record):
                         if (a == j):
-                            query += chr(i+65)
+                            if j == 0:
+                                features_value = [0, 1, isClass] # Object bound (constant)
+                            else:
+                                features_value = [1, 0, isClass]
+                            query += chr(j+65)
                         else:
                             query += column
 
                         if (j != len(record) -1):
                             query += ","
                     query += ")"
+                    features[query] = features_value
 
                     # Fix the number of types
                     # If step count is >3, write 50 as the query type
@@ -53,7 +60,7 @@ def generateQueries(rule, arity, resultRecords):
                         else:
                             queries[i+1] = [query]
 
-    # Boolean queries 
+    # Boolean queries
     for i, key in enumerate(sorted(resultRecords)):
         # i will be the type for us
         for record in resultRecords[key]:
@@ -64,47 +71,65 @@ def generateQueries(rule, arity, resultRecords):
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
+                features[query] = [1, 1, isClass]
                 if (1000+i+1 in queries):
                     queries[1000+i+1].append(query)
                 else:
                     queries[1000+i+1] = [query]
 
-    runQueries(queries)
+    runQueries(queries, features)
 
 '''
 This function takses the queries dictionary has the input.
 Query type is the key and list of queries of that type is the value.
 '''
-def runQueries(queries):
+def runQueries(queries, features):
+    data = ""
     for queryType in queries.keys():
         shuffle(queries[queryType])
-        data = "Query Type QSQR MagicSets\n"
         iterations = 0
         for q in queries[queryType]:
             # Here invoke vlog and execute query and get the runtime
+            timeoutQSQR = False
             try:
-                outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e','edb.conf', '--rules', 'dlog/LUBM1_LE.dlog', '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
+                outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
             except TimeoutExpired:
-                outQSQR = "Runtime = >" + str(ARG_TIMEOUT) + "K milliseconds"
+                outQSQR = "Runtime = >" + str(ARG_TIMEOUT) + "K milliseconds. #rows = 0\\n"
+                timeoutQSQR = True
 
             strQSQR = str(outQSQR)
             index = strQSQR.find("Runtime =")
-            timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds")-1]
+            timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds", index)-1]
 
+            #TODO: Find # rows in the output and get the number of records in the result.
+            index = strQSQR.find("#rows =")
+            numResultsQSQR = strQSQR[index+8:strQSQR.find("\\n", index)]
+
+            timeoutMagic = False
             try:
-                outMagic = check_output(['../vlog', 'queryLiteral' ,'-e','edb.conf', '--rules', 'dlog/LUBM1_LE.dlog', '--reasoningAlgo', 'magic', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
+                outMagic = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'magic', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
             except TimeoutExpired:
-                outMagic = "Runtime = >" + str(ARG_TIMEOUT) + "K milliseconds"
+                outMagic = "Runtime = >" + str(ARG_TIMEOUT) + "K milliseconds. #rows = 0\\n"
+                timeoutMagic = True
 
             strMagic = str(outMagic)
             index = strMagic.find("Runtime =")
-            timeMagic = strMagic[index+10:strMagic.find("milliseconds")-1]
+            timeMagic = strMagic[index+10:strMagic.find("milliseconds", index)-1]
 
-            record = str(q) + " " + str(queryType) + " " + str(timeQSQR) + " " + str(timeMagic)
+            index = strMagic.find("#rows =")
+            numResultsMagic = strMagic[index+8:strMagic.find("\\n",index)]
+
+            if not timeoutQSQR and not timeoutMagic:
+                if (numResultsQSQR != numResultsMagic):
+                    print (numResultsMagic , " : " , numResultsQSQR, "-")
+
+            features[q].append(int(numResultsQSQR))
+
+            record = str(q) + " " + str(queryType) + " " + str(timeQSQR) + " " + str(timeMagic) + " " + str(features[q])
 
             print (record)
             data += record + "\n"
-            
+
             iterations += 1
             if iterations == ARG_NQ:
                 break
@@ -127,7 +152,7 @@ def isFileTooBig(fileName):
         return True
     return False
 
-def parseResultFile(name, resultFile):
+def parseResultFile(name, resultFile, isClass):
     print (name)
     results = defaultdict(list)
     arity = 0
@@ -148,7 +173,7 @@ def parseResultFile(name, resultFile):
 
         results[int(columns[0])].append(operands)
 
-    generateQueries(name, arity, results)
+    generateQueries(name, arity, results, isClass)
     #print (len(results))
 
 '''
@@ -156,24 +181,30 @@ Takes rule file and rule names array as the input
 For every rule checks if we got any resul
 '''
 def parseRulesFile(rulesFile, rulesWithResult):
+    #print(rulesFile, " : ", rulesWithResult)
     exploredRules = set()
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
+            isClass = False
             head = line.split(':')[0]
             body = line.split('-')[1]
             rule = head.split('(')[0]
             if rule in exploredRules:
                 continue
             exploredRules.add(rule)
+            if "rdf:type" in line:
+                # This predicate is a class
+                isClass = True
             if rule in rulesWithResult:
-                #print (head, "=>", body)
-                parseResultFile(rule, rulesWithResult[rule])
+                print (head, "=>", body)
+                parseResultFile(rule, rulesWithResult[rule], isClass)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
-    parser.add_argument('--rules' , type=str, help = 'Path to the rules file')
-    parser.add_argument('--mat', type=str, help = 'Path to the materialized directory')
+    parser.add_argument('--rules' , type=str, required = True, help = 'Path to the rules file')
+    parser.add_argument('--mat', type=str, required = True, help = 'Path to the materialized directory')
+    parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 3)
     parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 25)
     parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 50000)
@@ -192,7 +223,7 @@ rulesFile = args.rules
 outFile = args.out
 
 with open(outFile, 'w') as fout:
-    fout.write("")
+    fout.write("Query Type QSQR MagicSets\n")
 
 rulesWithResult = dict()
 matDir = args.mat
