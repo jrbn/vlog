@@ -757,9 +757,8 @@ Literal Program::parseLiteral(std::string l) {
             term = tuple;
             tuple = "";
         }
-#if DEBUG
-	BOOST_LOG_TRIVIAL(debug) << "Found term " << term;
-#endif
+
+	// BOOST_LOG_TRIVIAL(debug) << "Found term " << term;
 
         //Parse the term
         if (std::isupper(term.at(0))) {
