@@ -10,8 +10,6 @@ from subprocess import check_output, STDOUT, TimeoutExpired
 
 def generateQueries(rule, arity, resultRecords, isClass):
 
-    queries = {}
-    features= {}
 
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
@@ -77,7 +75,6 @@ def generateQueries(rule, arity, resultRecords, isClass):
                 else:
                     queries[1000+i+1] = [query]
 
-    runQueries(queries, features)
 
 '''
 This function takses the queries dictionary has the input.
@@ -94,7 +91,7 @@ def runQueries(queries, features):
             try:
                 outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
             except TimeoutExpired:
-                outQSQR = "Runtime = >" + str(ARG_TIMEOUT) + "K milliseconds. #rows = 0\\n"
+                outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
                 timeoutQSQR = True
 
             strQSQR = str(outQSQR)
@@ -109,7 +106,7 @@ def runQueries(queries, features):
             try:
                 outMagic = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'magic', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
             except TimeoutExpired:
-                outMagic = "Runtime = >" + str(ARG_TIMEOUT) + "K milliseconds. #rows = 0\\n"
+                outMagic = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
                 timeoutMagic = True
 
             strMagic = str(outMagic)
@@ -205,7 +202,7 @@ def parse_args():
     parser.add_argument('--rules' , type=str, required = True, help = 'Path to the rules file')
     parser.add_argument('--mat', type=str, required = True, help = 'Path to the materialized directory')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
-    parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 3)
+    parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 30)
     parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 25)
     parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 50000)
     parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 1000000)
@@ -236,5 +233,7 @@ for root, dirs, files in os.walk(os.path.abspath(matDir)):
         resultFiles.append(ruleResultFilePath)
         #print (f)
 
+queries = {}
+features= {}
 parseRulesFile(rulesFile, rulesWithResult)
-
+runQueries(queries, features)
