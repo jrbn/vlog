@@ -367,9 +367,9 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
 		    uint64_t est = estimate(0, pred, inputTable/*, 0*/,countRules, countIntQueries,execRules,queryEstimate);
 		    if (queryEstimate)
 		    {	
-		    	BOOST_LOG_TRIVIAL(info) << "No of Rules Executed(depth of 3) : " << countRules;
-		    	BOOST_LOG_TRIVIAL(info) << "No of Intermediate Queries" << countIntQueries;	
-			BOOST_LOG_TRIVIAL(info) << "No of Unique Rules" << execRules.size();
+		    	BOOST_LOG_TRIVIAL(info) << "# rules executed ( depth of 3 ) = " << countRules;
+		    	BOOST_LOG_TRIVIAL(info) << "# intermediate queries =" << countIntQueries;	
+			BOOST_LOG_TRIVIAL(info) << "# unique rules =" << execRules.size();
 	
                     }
 		    output->addRow(&est);
