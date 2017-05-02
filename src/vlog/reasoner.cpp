@@ -371,7 +371,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
 
     TupleTable *outputTable;
     if (returnOnlyVars) {
-	outputTable = tempTable;
+	outputTable = tempTable1;
     } else {
 	outputTable = new TupleTable(3);
 	uint64_t val[3];
@@ -384,6 +384,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
 		val[newPosJoins[i]] = current[i];
 	    }
 	}
+	outputTable->addRow(val);
 	delete tempTable1;
     }
 
