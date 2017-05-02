@@ -173,6 +173,9 @@ size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, s
 
 void QSQR::evaluate(Predicate &pred, BindingsTable *inputTable,
                     size_t offsetInput, bool repeat) {
+
+    // BOOST_LOG_TRIVIAL(debug) << "QSQR:evaluate predicate = " << (int) pred.getId()  << ", nTUples = " << inputTable->getNTuples() << ", offsetInput = " << offsetInput;
+
 #ifdef RECURSIVE_QSQR
     size_t totalAnswers;
     bool shouldRepeat = false;

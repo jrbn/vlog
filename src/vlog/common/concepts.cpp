@@ -610,15 +610,15 @@ void Program::readFromFile(std::string pathFile) {
 	BOOST_LOG_TRIVIAL(info) << "Using default rule TI(A,B,C) :- TE(A,B,C)";
 	parseRule("TI(A,B,C) :- TE(A,B,C)");
     } else {
-    std::ifstream file(pathFile);
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line != "" && line.substr(0, 2) != "//") {
-            BOOST_LOG_TRIVIAL(trace) << "Parsing rule " << line;
-            parseRule(line);
-        }
-    }
-    BOOST_LOG_TRIVIAL(info) << "New assigned constants: " << additionalConstants.size();
+	std::ifstream file(pathFile);
+	std::string line;
+	while (std::getline(file, line)) {
+	    if (line != "" && line.substr(0, 2) != "//") {
+		BOOST_LOG_TRIVIAL(trace) << "Parsing rule " << line;
+		parseRule(line);
+	    }
+	}
+	BOOST_LOG_TRIVIAL(info) << "New assigned constants: " << additionalConstants.size();
     }
 }
 
@@ -689,16 +689,76 @@ Literal Program::parseLiteral(std::string l) {
 
     //Calculate the tuple
     std::vector<VTerm> t;
+    std::string term;
     while (tuple.size() > 0) {
-        size_t posTerm = tuple.find(",");
-        std::string term;
-        if (posTerm != std::string::npos) {
+	size_t posTerm = 0;
+	while (posTerm < tuple.size()) {
+	    if (tuple[posTerm] == ',' || tuple[posTerm] == ')') {
+		break;
+	    }
+	    switch(tuple[posTerm]) {
+	    case '\'':
+		posTerm++;
+		while (posTerm < tuple.size()) {
+		    if (tuple[posTerm] == '\\') {
+			posTerm++;
+			if (posTerm != tuple.size()) {
+			    posTerm++;
+			}
+			continue;
+		    }
+		    if (tuple[posTerm] == '\'') {
+			break;
+		    }
+		    posTerm++;
+		}
+		break;
+	    case '\"':
+		posTerm++;
+		while (posTerm < tuple.size()) {
+		    if (tuple[posTerm] == '\\') {
+			posTerm++;
+			if (posTerm != tuple.size()) {
+			    posTerm++;
+			}
+			continue;
+		    }
+		    if (tuple[posTerm] == '\"') {
+			break;
+		    }
+		    posTerm++;
+		}
+		break;
+	    case '<':
+		posTerm++;
+		while (posTerm < tuple.size()) {
+		    if (tuple[posTerm] == '\\') {
+			posTerm++;
+			if (posTerm != tuple.size()) {
+			    posTerm++;
+			}
+			continue;
+		    }
+		    if (tuple[posTerm] == '>') {
+			break;
+		    }
+		    posTerm++;
+		}
+		break;
+	    default:
+		posTerm++;
+		break;
+	    }
+	}
+        if (posTerm != tuple.size()) {
             term = tuple.substr(0, posTerm);
-            tuple = tuple.substr(posTerm + 1, std::string::npos);
+            tuple = tuple.substr(posTerm + 1, tuple.size());
         } else {
             term = tuple;
             tuple = "";
         }
+
+	// BOOST_LOG_TRIVIAL(debug) << "Found term " << term;
 
         //Parse the term
         if (std::isupper(term.at(0))) {
