@@ -402,11 +402,12 @@ void RuleExecutor::evaluateRule(const uint8_t bodyAtom,
 	    // posJoinsLiteral is variable position, so for instance 1 means second variable.
 	    // However, in edb layer, it means position in query, which may also contain constants.
 	    // So, replace by variable positions in query.
+	    std::vector<uint8_t> posJoinsLiteral1;
 	    for (int i = 0; i < posJoinsLiteral.size(); i++) {
-		posJoinsLiteral[i] = l.getPosVars()[posJoinsLiteral[i]];
+		posJoinsLiteral1.push_back(l.getPosVars()[posJoinsLiteral[i]]);
 	    }
             layer.query(&query, retrievedBindings,
-                        &posJoinsLiteral, &bindings);
+                        &posJoinsLiteral1, &bindings);
         } else {
             layer.query(&query, retrievedBindings, NULL, NULL);
         }
@@ -532,7 +533,7 @@ void RuleExecutor::printLineage(std::vector<LineageInfo> &lineage) {
 
 size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t offsetInput,*/ QSQR * qsqr,
                               EDBLayer &layer) {
-    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(NULL,NULL) << ", depth = " << depth;
+    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(NULL,NULL) << ", depth = " << depth << ", nTUples = " << input->getNTuples();
     size_t output = 0;
     //if (input->getNTuples() > offsetInput) {
     //Get the new tuples. All the tuples that merge with the head of the
@@ -616,7 +617,7 @@ void RuleExecutor::evaluate(BindingsTable * input, size_t offsetInput,
                             QSQR * qsqr,
                             EDBLayer &layer) {
 
-
+    BOOST_LOG_TRIVIAL(debug) << "Evaluating rule " << adornedRule.tostring(NULL,NULL) << ", nTUples = " << input->getNTuples() << ", offsetInput = " << offsetInput;
     //Evaluate the rule
     if (input->getNTuples() > offsetInput) {
         //Get the new tuples. All the tuples that merge with the head of the
