@@ -12,18 +12,19 @@
 
 #include <boost/log/trivial.hpp>
 #include <boost/thread.hpp>
+#include <boost/chrono.hpp>
 
 #include <string>
 #include <vector>
 
 long cmpRow(std::vector<uint8_t> *posJoins, const Term_t *row1, const uint64_t *row2) {
     for (int i = 0; i < posJoins->size(); ++i) {
-	long r = (row1[i] - row2[(*posJoins)[i]]);
-	// BOOST_LOG_TRIVIAL(debug) << "cmpRow: i = " << i << ", row1[i] = " << row1[i]
-	//     << ", row2[(*posJoins)[i]] = " << row2[(*posJoins)[i]] << ", r = " << r;
-	if (r != 0) {
+        long r = (row1[i] - row2[(*posJoins)[i]]);
+        // BOOST_LOG_TRIVIAL(debug) << "cmpRow: i = " << i << ", row1[i] = " << row1[i]
+        //     << ", row2[(*posJoins)[i]] = " << row2[(*posJoins)[i]] << ", r = " << r;
+        if (r != 0) {
             return r;
-	}
+        }
     }
     return 0;
 }
@@ -35,11 +36,11 @@ void Reasoner::cleanBindings(std::vector<Term_t> &possibleValuesJoins, std::vect
             possibleValuesJoins.clear();
         } else {
             /*
-                uint8_t posJoinsCopy[sizeBindings];
-                for (int j = sizeBindings - 1; j >= 0; j--) {
-                    posJoinsCopy[j] = posJoins->at(j);
-                }
-            */
+               uint8_t posJoinsCopy[sizeBindings];
+               for (int j = sizeBindings - 1; j >= 0; j--) {
+               posJoinsCopy[j] = posJoins->at(j);
+               }
+               */
 
             std::vector<Term_t> outputBindings;
 
@@ -62,11 +63,11 @@ void Reasoner::cleanBindings(std::vector<Term_t> &possibleValuesJoins, std::vect
                     if (idxInput < input->getNRows())
                         currentRowInput = input->getRow(idxInput);
                 }
-		if (cmpResult == 0) {
+                if (cmpResult == 0) {
                     idxBindings += sizeBindings;
                     if (idxBindings < possibleValuesJoins.size())
                         currentRowBindings = &possibleValuesJoins[idxBindings];
-		}
+                }
             }
 
             //Write all elements that are left
@@ -76,24 +77,24 @@ void Reasoner::cleanBindings(std::vector<Term_t> &possibleValuesJoins, std::vect
 
 
             /*
-            for (int i = input->getNRows() - 1; i >= 0; i--) {
-                const Term_t *rowToRemove = input->getRow(i);
-                //Go through the bindings
-                for (std::vector<Term_t>::reverse_iterator itr = possibleValuesJoins.rbegin();
-                        itr != possibleValuesJoins.rend();) {
-                    bool same = true;
-                    for (int j = sizeBindings - 1; j >= 0; j--) {
-                        if (same && rowToRemove[posJoinsCopy[j]] != *itr) {
-                            same = false;
-                        }
-                        itr++;
-                    }
-                    //Remove the row
-                    if (same) {
-                        possibleValuesJoins.erase(itr.base(), itr.base() + sizeBindings);
-                        break;
-                    }
-                }
+               for (int i = input->getNRows() - 1; i >= 0; i--) {
+               const Term_t *rowToRemove = input->getRow(i);
+            //Go through the bindings
+            for (std::vector<Term_t>::reverse_iterator itr = possibleValuesJoins.rbegin();
+            itr != possibleValuesJoins.rend();) {
+            bool same = true;
+            for (int j = sizeBindings - 1; j >= 0; j--) {
+            if (same && rowToRemove[posJoinsCopy[j]] != *itr) {
+            same = false;
+            }
+            itr++;
+            }
+            //Remove the row
+            if (same) {
+            possibleValuesJoins.erase(itr.base(), itr.base() + sizeBindings);
+            break;
+            }
+            }
             }*/
             possibleValuesJoins.swap(outputBindings);
         }
@@ -102,110 +103,110 @@ void Reasoner::cleanBindings(std::vector<Term_t> &possibleValuesJoins, std::vect
 
 //Function no longer used
 /*TupleTable *Reasoner::getVerifiedBindings(QSQQuery &query,
-        std::vector<uint8_t> *posJoins,
-        std::vector<Term_t> *possibleValuesJoins,
-        EDBLayer &layer, Program &program, DictMgmt *dict,
-        bool returnOnlyVars) {
+  std::vector<uint8_t> *posJoins,
+  std::vector<Term_t> *possibleValuesJoins,
+  EDBLayer &layer, Program &program, DictMgmt *dict,
+  bool returnOnlyVars) {
 
-    QSQR evaluator(layer, &program);
-    TupleTable *output = NULL;
+  QSQR evaluator(layer, &program);
+  TupleTable *output = NULL;
 
-    std::vector<Rule> *originalRules = program.getAllRulesByPredicate(query.getLiteral()->getPredicate().getId());
+  std::vector<Rule> *originalRules = program.getAllRulesByPredicate(query.getLiteral()->getPredicate().getId());
 
-    //Create a smaller program
-    Program clonedProgram = program.clone();
-    std::vector<Rule> *clonedRules = clonedProgram.getAllRulesByPredicate(query.getLiteral()->getPredicate().getId());
-    //Clean any rule with IDB predicates
-    while (clonedRules->size() > 0) {
-        if (clonedRules->back().getNIDBPredicates() != 0)
-            clonedRules->pop_back();
-        else
-            break;
-    }
+//Create a smaller program
+Program clonedProgram = program.clone();
+std::vector<Rule> *clonedRules = clonedProgram.getAllRulesByPredicate(query.getLiteral()->getPredicate().getId());
+//Clean any rule with IDB predicates
+while (clonedRules->size() > 0) {
+if (clonedRules->back().getNIDBPredicates() != 0)
+clonedRules->pop_back();
+else
+break;
+}
 
-    //Execute the smaller program
+//Execute the smaller program
+evaluator.deallocateAllRules();
+evaluator.cleanAllInputs();
+evaluator.setProgram(&clonedProgram);
+#ifdef LINEAGE
+std::vector<LineageInfo> info;
+output = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins, possibleValuesJoins,
+returnOnlyVars, info);
+#else
+output = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins, possibleValuesJoins,
+returnOnlyVars);
+#endif
+if (output != NULL) {
+cleanBindings(*possibleValuesJoins, posJoins, output);
+if (possibleValuesJoins->size() == 0) {
+return output;
+}
+}
+
+//First execute all simple rules with one IDB in a sequence
+for (std::vector<Rule>::iterator itr = originalRules->begin(); itr != originalRules->end(); ++itr) {
+if (itr->getNIDBPredicates() == 0) {
+continue;
+} else if (itr->getNIDBPredicates() > 1 || possibleValuesJoins->size() == 0) {
+break;
+}
+
+//Add the rule
+evaluator.deallocateAllRules();
+clonedRules->push_back(*itr);
+
+//Launch only the single rule
+#ifdef LINEAGE
+std::vector<LineageInfo> info;
+TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
+possibleValuesJoins, returnOnlyVars, info);
+#else
+TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
+possibleValuesJoins, returnOnlyVars);
+#endif
+
+if (tmpTable != NULL) {
+//Clean the bindings
+cleanBindings(*possibleValuesJoins, posJoins, tmpTable);
+
+//Add the temporary bindings to the table
+if (output == NULL) {
+output = tmpTable;
+} else {
+output->addAll(tmpTable);
+delete tmpTable;
+}
+}
+
+//Remove the rule
+clonedRules->pop_back();
+}
+
+if (possibleValuesJoins->size() > 0) {
     evaluator.deallocateAllRules();
-    evaluator.cleanAllInputs();
-    evaluator.setProgram(&clonedProgram);
+    evaluator.setProgram(&program);
+
 #ifdef LINEAGE
     std::vector<LineageInfo> info;
-    output = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins, possibleValuesJoins,
-                                     returnOnlyVars, info);
+    TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
+            possibleValuesJoins, returnOnlyVars, info);
 #else
-    output = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins, possibleValuesJoins,
-                                     returnOnlyVars);
-#endif
-    if (output != NULL) {
-        cleanBindings(*possibleValuesJoins, posJoins, output);
-        if (possibleValuesJoins->size() == 0) {
-            return output;
-        }
-    }
-
-    //First execute all simple rules with one IDB in a sequence
-    for (std::vector<Rule>::iterator itr = originalRules->begin(); itr != originalRules->end(); ++itr) {
-        if (itr->getNIDBPredicates() == 0) {
-            continue;
-        } else if (itr->getNIDBPredicates() > 1 || possibleValuesJoins->size() == 0) {
-            break;
-        }
-
-        //Add the rule
-        evaluator.deallocateAllRules();
-        clonedRules->push_back(*itr);
-
-        //Launch only the single rule
-#ifdef LINEAGE
-        std::vector<LineageInfo> info;
-        TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
-                               possibleValuesJoins, returnOnlyVars, info);
-#else
-        TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
-                               possibleValuesJoins, returnOnlyVars);
+    TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
+            possibleValuesJoins, returnOnlyVars);
 #endif
 
+    if (output == NULL) {
+        //Replace container
+        output = tmpTable;
+    } else {
+        //Add all the data
         if (tmpTable != NULL) {
-            //Clean the bindings
-            cleanBindings(*possibleValuesJoins, posJoins, tmpTable);
-
-            //Add the temporary bindings to the table
-            if (output == NULL) {
-                output = tmpTable;
-            } else {
-                output->addAll(tmpTable);
-                delete tmpTable;
-            }
-        }
-
-        //Remove the rule
-        clonedRules->pop_back();
-    }
-
-    if (possibleValuesJoins->size() > 0) {
-        evaluator.deallocateAllRules();
-        evaluator.setProgram(&program);
-
-#ifdef LINEAGE
-        std::vector<LineageInfo> info;
-        TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
-                               possibleValuesJoins, returnOnlyVars, info);
-#else
-        TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &query, posJoins,
-                               possibleValuesJoins, returnOnlyVars);
-#endif
-
-        if (output == NULL) {
-            //Replace container
-            output = tmpTable;
-        } else {
-            //Add all the data
-            if (tmpTable != NULL) {
-                output->addAll(tmpTable);
-                delete tmpTable;
-            }
+            output->addAll(tmpTable);
+            delete tmpTable;
         }
     }
-    return output;
+}
+return output;
 }*/
 
 size_t Reasoner::estimate(Literal &query, std::vector<uint8_t> *posBindings,
@@ -214,7 +215,7 @@ size_t Reasoner::estimate(Literal &query, std::vector<uint8_t> *posBindings,
 
     QSQQuery rootQuery(query);
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
-                                          new QSQR(layer, &program));
+            new QSQR(layer, &program));
     TupleTable *cardTable = NULL;
     cardTable = evaluator->evaluateQuery(QSQR_EST, &rootQuery,
                                          posBindings, valueBindings, true, countRules, countIntQueries, countUniqRules);
@@ -224,8 +225,8 @@ size_t Reasoner::estimate(Literal &query, std::vector<uint8_t> *posBindings,
 }
 
 FCBlock Reasoner::getBlockFromQuery(Literal constantsQuery, Literal &boundQuery,
-                                    std::vector<uint8_t> *posJoins,
-                                    std::vector<Term_t> *possibleValuesJoins) {
+        std::vector<uint8_t> *posJoins,
+        std::vector<Term_t> *possibleValuesJoins) {
     uint8_t nconstants = (uint8_t) constantsQuery.getTupleSize();
 
     VTuple constantsTuple = constantsQuery.getTuple();
@@ -268,7 +269,7 @@ FCBlock Reasoner::getBlockFromQuery(Literal constantsQuery, Literal &boundQuery,
         }
         table =
             std::shared_ptr<FCInternalTable>(
-                new InmemoryFCInternalTable(nconstants, 0, true, seg));
+                    new InmemoryFCInternalTable(nconstants, 0, true, seg));
 
         //change the constantsQuery
         if (possibleValuesJoins != NULL && possibleValuesJoins->size() > 1) {
@@ -282,7 +283,7 @@ FCBlock Reasoner::getBlockFromQuery(Literal constantsQuery, Literal &boundQuery,
     }
     //iteration==1
     return FCBlock(1, table, Literal(constantsQuery.getPredicate(), constantsTuple),
-                   NULL, 0, true);
+            NULL, 0, true);
 }
 
 TupleIterator *Reasoner::getIterator(Literal &query,
@@ -291,39 +292,39 @@ TupleIterator *Reasoner::getIterator(Literal &query,
         EDBLayer &edb, Program &program, bool returnOnlyVars,
         std::vector<uint8_t> *sortByFields) {
     if (posJoins != NULL && possibleValuesJoins != NULL) {
-	/* No, let's keep them. --Ceriel
-	// Check if there are'nt too many values to check.
-	if (possibleValuesJoins->size() > 0) {
-	    size_t nvals = possibleValuesJoins->size() / posJoins->size();
-	    if (nvals > 1000) {
-		possibleValuesJoins = NULL;
-		posJoins = NULL;
-	    }
-	}
-	*/
+        /* No, let's keep them. --Ceriel
+        // Check if there are'nt too many values to check.
+        if (possibleValuesJoins->size() > 0) {
+        size_t nvals = possibleValuesJoins->size() / posJoins->size();
+        if (nvals > 1000) {
+        possibleValuesJoins = NULL;
+        posJoins = NULL;
+        }
+        }
+        */
     }
     if (query.getPredicate().getType() == EDB) {
-	BOOST_LOG_TRIVIAL(info) << "Using edb for " << query.tostring(&program, &edb);
-	return Reasoner::getEDBIterator(query, posJoins, possibleValuesJoins, edb,
-				    returnOnlyVars, sortByFields);
+        BOOST_LOG_TRIVIAL(info) << "Using edb for " << query.tostring(&program, &edb);
+        return Reasoner::getEDBIterator(query, posJoins, possibleValuesJoins, edb,
+                returnOnlyVars, sortByFields);
     }
     if (posJoins == NULL || posJoins->size() < query.getNVars() || returnOnlyVars || posJoins->size() > 1) {
-	ReasoningMode mode = chooseMostEfficientAlgo(query, edb, program, posJoins, possibleValuesJoins);
-	if (mode == MAGIC) {
-	    BOOST_LOG_TRIVIAL(info) << "Using magic for " << query.tostring(&program, &edb);
-	    return Reasoner::getMagicIterator(
-					query, posJoins, possibleValuesJoins, edb, program,
-					returnOnlyVars, sortByFields);
-	}
-	//top-down
-	BOOST_LOG_TRIVIAL(info) << "Using top-down for " << query.tostring(&program, &edb);
-	return Reasoner::getTopDownIterator(
-		       query, posJoins, possibleValuesJoins, edb, program,
-		       returnOnlyVars, sortByFields);
+        ReasoningMode mode = chooseMostEfficientAlgo(query, edb, program, posJoins, possibleValuesJoins);
+        if (mode == MAGIC) {
+            BOOST_LOG_TRIVIAL(info) << "Using magic for " << query.tostring(&program, &edb);
+            return Reasoner::getMagicIterator(
+                    query, posJoins, possibleValuesJoins, edb, program,
+                    returnOnlyVars, sortByFields);
+        }
+        //top-down
+        BOOST_LOG_TRIVIAL(info) << "Using top-down for " << query.tostring(&program, &edb);
+        return Reasoner::getTopDownIterator(
+                query, posJoins, possibleValuesJoins, edb, program,
+                returnOnlyVars, sortByFields);
     }
 
     BOOST_LOG_TRIVIAL(info) << "Using incremental reasoning for " << query.tostring(&program, &edb);
-    return getIncrReasoningIterator(query, posJoins, possibleValuesJoins, edb, program, returnOnlyVars, sortByFields); 
+    return getIncrReasoningIterator(query, posJoins, possibleValuesJoins, edb, program, returnOnlyVars, sortByFields);
 }
 
 TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
@@ -358,7 +359,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
     std::string te("TE");
     VTuple t = query.getTuple();
     QSQQuery explQuery(Literal(program.getPredicate(te,
-                               Predicate::calculateAdornment(t)), t));
+                    Predicate::calculateAdornment(t)), t));
 
 
     BOOST_LOG_TRIVIAL(debug) << "Expl query = " << explQuery.getLiteral()->tostring(&program, &edb);
@@ -401,18 +402,18 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
             cleanBindings(*possibleValuesJoins, &newPosJoins, outputTable);
         }
 
-	BOOST_LOG_TRIVIAL(info) << "number of possible values = " << (possibleValuesJoins->size() / posJoins->size());
+        BOOST_LOG_TRIVIAL(info) << "number of possible values = " << (possibleValuesJoins->size() / posJoins->size());
         if (possibleValuesJoins->size() / posJoins->size() <= 1000) {
-	    // TODO: experiment with threshold on when to use this ...
+            // TODO: experiment with threshold on when to use this ...
             //I use QSQR
             QSQR evaluator(edb, &program);
             std::vector<Rule> *originalRules = program.getAllRulesByPredicate(
-                                                   rootQuery.getLiteral()->getPredicate().getId());
+                    rootQuery.getLiteral()->getPredicate().getId());
 
             //Create a smaller program
             Program clonedProgram = program.clone();
             std::vector<Rule> *clonedRules = clonedProgram.getAllRulesByPredicate(
-                                                 rootQuery.getLiteral()->getPredicate().getId());
+                    rootQuery.getLiteral()->getPredicate().getId());
             //Clean any rule with IDB predicates
             while (clonedRules->size() > 0) {
                 if (clonedRules->back().getNIDBPredicates() != 0)
@@ -431,7 +432,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
                 if (itr->getNIDBPredicates() == 0) {
                     continue;
                 } else if (itr->getNIDBPredicates() > 1
-                           || possibleValuesJoins->size() == 0) {
+                        || possibleValuesJoins->size() == 0) {
                     break;
                 }
 
@@ -451,15 +452,15 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
                     delete tmpTable;
                     tmpTable = tmp1;
                     if (tmpTable->getNRows() > 0) {
-			BOOST_LOG_TRIVIAL(debug) << "#values = " << tmpTable->getNRows();
+                        BOOST_LOG_TRIVIAL(debug) << "#values = " << tmpTable->getNRows();
                         cleanBindings(*possibleValuesJoins, &newPosJoins, tmpTable);
 
-			//Add the temporary bindings to the table
-			tmp1 = outputTable->merge(tmpTable);
-			delete outputTable;
-			delete tmpTable;
-			outputTable = tmp1;
-		    }
+                        //Add the temporary bindings to the table
+                        tmp1 = outputTable->merge(tmpTable);
+                        delete outputTable;
+                        delete tmpTable;
+                        outputTable = tmp1;
+                    }
                 }
 
                 //Remove the rule
@@ -470,17 +471,17 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
         if (possibleValuesJoins->size() > 0) {
             // Decide between magic or QSQ-R, to verify the remaining values.
             int algo = chooseMostEfficientAlgo(query, edb, program,
-                                               posJoins,
-                                               possibleValuesJoins);
+                    posJoins,
+                    possibleValuesJoins);
 
             TupleIterator *itr = NULL;
 
             if (algo == TOPDOWN) {
                 itr = getTopDownIterator(query, posJoins, possibleValuesJoins,
-                                         edb, program, returnOnlyVars, &newPosJoins);
+                        edb, program, returnOnlyVars, &newPosJoins);
             } else {
                 itr = getMagicIterator(query, posJoins, possibleValuesJoins,
-                                       edb, program, returnOnlyVars, &newPosJoins);
+                        edb, program, returnOnlyVars, &newPosJoins);
             }
 
             //Add the bindings to a temporary container.
@@ -495,7 +496,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
             //Merge the temporary container into the final one.
             //Keeps the output table sorted.
             TupleTable *tmp1 = outputTable->merge(tmp);
-	    delete tmp;
+            delete tmp;
             delete outputTable;
             outputTable = tmp1;
 
@@ -538,7 +539,7 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
                     if (newPosJoins[m] >= j)
                         newPosJoins[m]++;
                 }
-		// Line below added (quite important ...) --Ceriel
+                // Line below added (quite important ...) --Ceriel
                 outputTuple[j] = query.getTermAtPos(j).getValue();
             } else {
                 posToCopy[nPosToCopy++] = j;
@@ -567,6 +568,7 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
 
     }
 
+    boost::chrono::system_clock::time_point start = timens::system_clock::now();
     Predicate pred1(query.getPredicate(), Predicate::calculateAdornment(boundTuple));
     Literal query1(pred1, boundTuple);
 
@@ -585,7 +587,11 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
     //Rewrite and add the rules
     std::pair<PredId_t, PredId_t> inputOutputRelIDs;
     std::shared_ptr<Program> magicProgram = wizard->doMagic(query1, adornedProgram,
-                                            inputOutputRelIDs);
+            inputOutputRelIDs);
+
+    boost::chrono::duration<double> sec = boost::chrono::system_clock::now()
+        - start;
+    BOOST_LOG_TRIVIAL(info) << "Runtime program rewriting = " << sec.count() * 1000 << " milliseconds";
 
 #if DEBUG
     BOOST_LOG_TRIVIAL(debug) << "Magic program:";
@@ -596,7 +602,7 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
 #endif
 
     SemiNaiver *naiver = new SemiNaiver(magicProgram->getAllRules(),
-                                        edb, magicProgram.get(), true, true, false, -1, false) ;
+            edb, magicProgram.get(), true, true, false, -1, false) ;
 
     //Add all the input tuples in the input relation
     Predicate pred = magicProgram->getPredicate(inputOutputRelIDs.first);
@@ -611,8 +617,8 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
     Literal unboundQuery(pred, onlyConstsTuple);
     BOOST_LOG_TRIVIAL(debug) << "unboundQuery = " << unboundQuery.tostring(magicProgram.get(), &edb);
     naiver->addDataToIDBRelation(magicProgram->getPredicate(inputOutputRelIDs.first),
-                                 getBlockFromQuery(unboundQuery, query1,
-                                         newPosJoins.size() != 0 ? &newPosJoins : NULL, possibleValuesJoins));
+            getBlockFromQuery(unboundQuery, query1,
+                newPosJoins.size() != 0 ? &newPosJoins : NULL, possibleValuesJoins));
 
     //Exec the materialization
     naiver->run(1, 2);
@@ -635,10 +641,10 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
     std::vector<uint8_t> posVars = outputLiteral.getPosVars();
     while (!itr.isEmpty()) {
         std::shared_ptr<const FCInternalTable> table = itr.getCurrentTable();
-	// BOOST_LOG_TRIVIAL(debug) << "table empty? " << table->isEmpty();
+        // BOOST_LOG_TRIVIAL(debug) << "table empty? " << table->isEmpty();
         FCInternalTableItr *itrTable = table->getIterator();
 
-	// itrTable contains only variables. 
+        // itrTable contains only variables.
         if (returnOnlyVars) {
             //const uint8_t rowSize = table->getRowSize();
             while (itrTable->hasNext()) {
@@ -659,7 +665,7 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
                     outputTuple[posToCopy[j]] = itrTable->getCurrentValue(j);
                 }
                 finalTable->addRow(outputTuple);
-		// BOOST_LOG_TRIVIAL(debug) << "Adding row " << outputTuple[0] << ", " << outputTuple[1] << ", " << outputTuple[2];
+                // BOOST_LOG_TRIVIAL(debug) << "Adding row " << outputTuple[0] << ", " << outputTuple[1] << ", " << outputTuple[2];
             }
         }
 
@@ -682,27 +688,27 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
 
 TupleIterator *Reasoner::getMaterializationIterator(Literal &query,
         std::vector<uint8_t> *posJoins,
-	std::vector<Term_t> *possibleValuesJoins,
-	EDBLayer &edb, Program &program, bool returnOnlyVars,
-	std::vector<uint8_t> *sortByFields) {
+        std::vector<Term_t> *possibleValuesJoins,
+        EDBLayer &edb, Program &program, bool returnOnlyVars,
+        std::vector<uint8_t> *sortByFields) {
 
     Predicate pred = query.getPredicate();
     VTuple tuple = query.getTuple();
     if (pred.getType() == EDB) {
-	BOOST_LOG_TRIVIAL(info) << "Using edb for " << query.tostring(&program, &edb);
-	return Reasoner::getEDBIterator(query, posJoins, possibleValuesJoins, edb,
-				returnOnlyVars, sortByFields);
+        BOOST_LOG_TRIVIAL(info) << "Using edb for " << query.tostring(&program, &edb);
+        return Reasoner::getEDBIterator(query, posJoins, possibleValuesJoins, edb,
+                returnOnlyVars, sortByFields);
     }
 
     if (posJoins != NULL) {
-	BOOST_LOG_TRIVIAL(info) << "getMaterializationIterator with joins not implemented yet";
-	throw 10;
+        BOOST_LOG_TRIVIAL(info) << "getMaterializationIterator with joins not implemented yet";
+        throw 10;
     }
-    
+
     // Run materialization
-   SemiNaiver *sn = new SemiNaiver(program.getAllRules(),
-		      edb, &program, true, true,
-		      false, -1, false);
+    SemiNaiver *sn = new SemiNaiver(program.getAllRules(),
+            edb, &program, true, true,
+            false, -1, false);
 
     sn->run();
 
@@ -711,47 +717,47 @@ TupleIterator *Reasoner::getMaterializationIterator(Literal &query,
     uint8_t nPosToCopy = 0;
     uint8_t posToCopy[3];
     for (int j = 0; j < query.getTupleSize(); ++j) {
-	if (!query.getTermAtPos(j).isVariable()) {
-	    outputTuple[j] = query.getTermAtPos(j).getValue();
-	} else {
-	    posToCopy[nPosToCopy++] = j;
-	}
+        if (!query.getTermAtPos(j).isVariable()) {
+            outputTuple[j] = query.getTermAtPos(j).getValue();
+        } else {
+            posToCopy[nPosToCopy++] = j;
+        }
     }
 
     FCIterator tableIt = sn->getTable(pred.getId());
 
     TupleTable *finalTable;
     if (returnOnlyVars) {
-	finalTable = new TupleTable(query.getNVars());
+        finalTable = new TupleTable(query.getNVars());
     } else {
-	finalTable = new TupleTable(query.getTupleSize());
+        finalTable = new TupleTable(query.getTupleSize());
     }
     while (! tableIt.isEmpty()) {
-	std::shared_ptr<const FCInternalTable> table = tableIt.getCurrentTable();
-	FCInternalTableItr *itrTable = table->getIterator();
-	while (itrTable->hasNext()) {
-	    itrTable->next();
-	    bool copy = true;
-	    for (int i = 0; i < tuple.getSize(); i++) {
-		if (! tuple.get(i).isVariable()) {
-		    if (itrTable->getCurrentValue(i) != tuple.get(i).getValue()) {
-			copy = false;
-			break;
-		    }
-		}
-	    }
-	    if (! copy) {
-		continue;
-	    }
-	    for (int i = 0; i < tuple.getSize(); i++) {
-		if (! returnOnlyVars || tuple.get(i).isVariable()) {
-		    finalTable->addValue(itrTable->getCurrentValue(i));
-		}
-	    }
+        std::shared_ptr<const FCInternalTable> table = tableIt.getCurrentTable();
+        FCInternalTableItr *itrTable = table->getIterator();
+        while (itrTable->hasNext()) {
+            itrTable->next();
+            bool copy = true;
+            for (int i = 0; i < tuple.getSize(); i++) {
+                if (! tuple.get(i).isVariable()) {
+                    if (itrTable->getCurrentValue(i) != tuple.get(i).getValue()) {
+                        copy = false;
+                        break;
+                    }
+                }
+            }
+            if (! copy) {
+                continue;
+            }
+            for (int i = 0; i < tuple.getSize(); i++) {
+                if (! returnOnlyVars || tuple.get(i).isVariable()) {
+                    finalTable->addValue(itrTable->getCurrentValue(i));
+                }
+            }
 
-	}
-	table->releaseIterator(itrTable);
-	tableIt.moveNextCount();
+        }
+        table->releaseIterator(itrTable);
+        tableIt.moveNextCount();
     }
 
     std::shared_ptr<TupleTable> pFinalTable(finalTable);
@@ -786,12 +792,12 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
             newTuple.set(VTerm(0, valueBindings->at(idxValues)), *itr);
             idxValues++;
         }
-	// Fixed adornments in predicate of literal below.
-	Predicate pred1(query.getPredicate(), Predicate::calculateAdornment(newTuple));
+        // Fixed adornments in predicate of literal below.
+        Predicate pred1(query.getPredicate(), Predicate::calculateAdornment(newTuple));
         Literal newLiteral(pred1, newTuple);
         size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program, NULL, NULL, NULL);
         BOOST_LOG_TRIVIAL(debug) << "SingleCost is " <<
-                                 singleCost << " nBindings " << (valueBindings->size() / posBindings->size());
+            singleCost << " nBindings " << (valueBindings->size() / posBindings->size());
 
         //Are bindings less than 10? Then singleCost is probably about right
         uint64_t nValues = valueBindings->size() / posBindings->size();
@@ -820,9 +826,9 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
     }
     ReasoningMode mode = cost < threshold ? TOPDOWN : MAGIC;
     BOOST_LOG_TRIVIAL(debug) << "Deciding whether I should resolve " <<
-                             query.tostring(&program, &layer) <<
-                             " with magic or QSQR. Estimated cost: " <<
-                             cost << " threshold for QSQ-R is " << threshold;
+        query.tostring(&program, &layer) <<
+        " with magic or QSQR. Estimated cost: " <<
+        cost << " threshold for QSQ-R is " << threshold;
     return mode;
 }
 
@@ -837,24 +843,24 @@ TupleIterator *Reasoner::getEDBIterator(Literal &query,
     edb.query(&qsqquery, table, posJoins, possibleValuesJoins);
     std::shared_ptr<TupleTable> ptable = std::shared_ptr<TupleTable>(table);
     if (! returnOnlyVars && nVars != 3) {
-	VTuple v = query.getTuple();
-	TupleTable *newTable = new TupleTable(3);
-	TupleIterator *itr = new TupleTableItr(ptable);
-	while (itr->hasNext()) {
-	    itr->next();
-	    uint64_t row[3];
-	    int cnt = 0;
-	    for (int i = 0; i < 3; i++) {
-		if (v.get(i).isVariable()) {
-		    row[i] = itr->getElementAt(cnt);
-		    cnt++;
-		} else {
-		    row[i] = v.get(i).getValue();
-		}
-	    }
-	    newTable->addRow(row);
-	}
-	ptable = std::shared_ptr<TupleTable>(newTable);
+        VTuple v = query.getTuple();
+        TupleTable *newTable = new TupleTable(3);
+        TupleIterator *itr = new TupleTableItr(ptable);
+        while (itr->hasNext()) {
+            itr->next();
+            uint64_t row[3];
+            int cnt = 0;
+            for (int i = 0; i < 3; i++) {
+                if (v.get(i).isVariable()) {
+                    row[i] = itr->getElementAt(cnt);
+                    cnt++;
+                } else {
+                    row[i] = v.get(i).getValue();
+                }
+            }
+            newTable->addRow(row);
+        }
+        ptable = std::shared_ptr<TupleTable>(newTable);
     }
     //Add sort by if requested
     if (sortByFields != NULL && !sortByFields->empty()) {
@@ -915,13 +921,13 @@ std::shared_ptr<SemiNaiver> Reasoner::getSemiNaiver(EDBLayer &layer,
     BOOST_LOG_TRIVIAL(debug) << "interRuleThreads = " << interRuleThreads << ", shuffleRules = " << shuffleRules;
     if (interRuleThreads > 0) {
         std::shared_ptr<SemiNaiver> sn(new SemiNaiverThreaded(p->getAllRules(),
-                                       layer, p, opt_intersect, opt_filtering,
-                                       shuffleRules, nthreads, interRuleThreads));
+                    layer, p, opt_intersect, opt_filtering,
+                    shuffleRules, nthreads, interRuleThreads));
         return sn;
     } else {
         std::shared_ptr<SemiNaiver> sn(new SemiNaiver(p->getAllRules(),
-                                       layer, p, opt_intersect, opt_filtering,
-                                       opt_threaded, nthreads, shuffleRules));
+                    layer, p, opt_intersect, opt_filtering,
+                    opt_threaded, nthreads, shuffleRules));
         return sn;
     }
 }
@@ -931,7 +937,7 @@ std::shared_ptr<SemiNaiver> Reasoner::fullMaterialization(EDBLayer &layer,
     BOOST_LOG_TRIVIAL(info) << "Starting full materialization";
     timens::system_clock::time_point start = timens::system_clock::now();
     std::shared_ptr<SemiNaiver> sn = getSemiNaiver(layer,
-                                     p, opt_intersect, opt_filtering, opt_threaded, nthreads, interRuleThreads, shuffleRules);
+            p, opt_intersect, opt_filtering, opt_threaded, nthreads, interRuleThreads, shuffleRules);
     sn->run();
     boost::chrono::duration<double> sec = boost::chrono::system_clock::now() - start;
     BOOST_LOG_TRIVIAL(info) << "Runtime materialization = " << sec.count() * 1000 << " milliseconds";

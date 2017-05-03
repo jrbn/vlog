@@ -134,11 +134,12 @@ void QSQR::createRules(Predicate &pred) {
 
 size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries, std::vector<Rule> &execRules) {
 
-    if (depth > 3) {
+    if (depth > 4) {
 	// Question is: what to return here. Assume no results? Assume 1 result?
         return 1;
     }
  
+    countIntQueries++;
     createRules(pred);
     std::vector<size_t> outputs;
     size_t output = 0;	
