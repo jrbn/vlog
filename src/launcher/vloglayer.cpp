@@ -353,7 +353,7 @@ uint64_t VLogLayer::getCardinality(VTuple tuple) {
                      Predicate::calculateAdornment(tuple)), tuple);
 
     if (got == idbCardinalities.end()) {
-        costImplicit = reasoner.estimate(idbquery, NULL, NULL, edb, this->p, false);
+        costImplicit = reasoner.estimate(idbquery, NULL, NULL, edb, this->p, NULL, NULL, NULL);
         idbCardinalities[tuple] = costImplicit;
     } else {
         costImplicit = got->second;

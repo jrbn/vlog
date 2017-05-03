@@ -9,8 +9,9 @@ RuleExecutor::RuleExecutor(Rule &rule, uint8_t headAdornment
                            , Program *program,
                            EDBLayer &layer
                           ) :
-    adornedRule(rule.createAdornment(headAdornment))
-    , program(program), layer(layer)
+    originalRule(rule),
+    adornedRule(rule.createAdornment(headAdornment)),
+    program(program), layer(layer)
 {
     calculateJoinsSizeIntermediateRelations();
 }
@@ -240,9 +241,8 @@ bool RuleExecutor::isUnifiable(const Term_t * const value, const size_t sizeTupl
 }
 
 size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
-                                  BindingsTable **supplRelations, QSQR* qsqr, EDBLayer &layer, int &countRules, int &countIntQueries, std::vector<Rule> &execRules, bool queryEstimate) {
+                                  BindingsTable **supplRelations, QSQR* qsqr, EDBLayer &layer, int &countRules, int &countIntQueries, std::vector<Rule> &execRules) {
     TupleTable *retrievedBindings = NULL;
-    int counter = 0;
     Literal l = adornedRule.getBody()[bodyAtom];
     uint8_t nCurrentJoins = this->njoins[bodyAtom];
     std::vector<uint8_t> posJoinsSupplRel;
@@ -277,12 +277,16 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
                         t.set(VTerm(0, bindings[i + j]), posJoinsLiteral[j]);
                     }
                     Literal query(l.getPredicate(), t);
-                    card += layer.estimateCardinality(query);
+                    size_t result = layer.estimateCardinality(query);
+		    BOOST_LOG_TRIVIAL(debug) << "Literal " << query.tostring(program, &layer) << ", Estimate from EDB " << result;
+		    card += result;
                 }
                 return card;
             } else {
                 //QSQQuery query(l);
-                return layer.estimateCardinality(l);
+                size_t result = layer.estimateCardinality(l);
+		BOOST_LOG_TRIVIAL(debug) << "Literal " << l.tostring(program, &layer) << ", Estimate from EDB " << result;
+		return result;
             }
         }
     } else {
@@ -331,7 +335,7 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
         //if (table->getNTuples() > offsetInput) {
 	countIntQueries = countIntQueries + 1;
         Predicate pred = query.getLiteral()->getPredicate();
-        return qsqr->estimate(depth, pred, table/*, offsetInput*/, countRules, countIntQueries,execRules,queryEstimate);
+        return qsqr->estimate(depth, pred, table/*, offsetInput*/, countRules, countIntQueries,execRules);
         //} else {
         //    return 0;
         //}
@@ -412,14 +416,15 @@ void RuleExecutor::evaluateRule(const uint8_t bodyAtom,
             std::vector<Term_t> bindings = supplRelations[bodyAtom]->
                                            getUniqueSortedProjection(
                                                posJoinsSupplRel);
-	// posJoinsLiteral is variable position, so for instance 1 means second variable.
-        // However, in edb layer, it means position in query, which may also contain constants.
-        // So, replace by variable positions in query.
-        for (int i = 0; i < posJoinsLiteral.size(); i++) {
-        posJoinsLiteral[i] = l.getPosVars()[posJoinsLiteral[i]];
-        }
+	    // posJoinsLiteral is variable position, so for instance 1 means second variable.
+	    // However, in edb layer, it means position in query, which may also contain constants.
+	    // So, replace by variable positions in query.
+	    std::vector<uint8_t> posJoinsLiteral1;
+	    for (int i = 0; i < posJoinsLiteral.size(); i++) {
+		posJoinsLiteral1.push_back(l.getPosVars()[posJoinsLiteral[i]]);
+	    }
             layer.query(&query, retrievedBindings,
-                        &posJoinsLiteral, &bindings);
+                        &posJoinsLiteral1, &bindings);
         } else {
             layer.query(&query, retrievedBindings, NULL, NULL);
         }
@@ -544,10 +549,9 @@ void RuleExecutor::printLineage(std::vector<LineageInfo> &lineage) {
 #endif
 
 size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t offsetInput,*/ QSQR * qsqr,
-                              EDBLayer &layer, const int ruleno,int &countRules, int &countIntQueries,std::vector<Rule> &execRules, bool queryEstimate) {
-    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(NULL,NULL) << ", depth = " << depth;
+                              EDBLayer &layer, const int ruleno,int &countRules, int &countIntQueries,std::vector<Rule> &execRules) {
+    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(program,&layer) << ", depth = " << depth << ", nTUples = " << input->getNTuples();
     size_t output = 0;
-    bool exists = true;
     //if (input->getNTuples() > offsetInput) {
     //Get the new tuples. All the tuples that merge with the head of the
     //adorned rule are being copied in the first supplementary relation
@@ -562,27 +566,21 @@ size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t o
     }
     if (supplRelations[0]->getNTuples() > 0) {
 	// If estimate() is called to get query statistics, following code will populate the execRules to get the No of unique rules executed.
-	if (queryEstimate)
-        {
-		if (countRules == 0)
-		{
-			execRules.push_back(adornedRule);
-		}
-		std::vector<Rule> newRules = execRules;
-		for (std::vector<Rule>::iterator itr = newRules.begin(); itr != newRules.end(); itr++)
-		{
-			if (itr->getHead() == adornedRule.getHead() && itr->getBody() == adornedRule.getBody())
-			{
-			 exists = true;
-			 break;	
-			}
-			exists= false;
-					
-		}
-		if(!exists)
-		{
-			execRules.push_back(adornedRule);
-		}
+	// TODO: this is not very efficient: linear search. Maybe just use a bitset to mark each rule? Each rule
+	// should then have some index number associated with it.
+	if (countRules == 0) {
+	    BOOST_LOG_TRIVIAL(debug) << "Adding rule " << originalRule.tostring(program,&layer) << " to execRules";
+	    execRules.push_back(originalRule);
+	} else {
+	    bool exists = false;
+	    for (std::vector<Rule>::iterator itr = execRules.begin(); itr != execRules.end() && ! exists; itr++) {
+		exists = itr->getHead() == originalRule.getHead() && itr->getBody() == originalRule.getBody();
+		BOOST_LOG_TRIVIAL(debug) << "Comparing rule " << originalRule.tostring(program,&layer) << " with rule " << itr->tostring(program, &layer) << " results in " << exists;
+	    }
+	    if(!exists) {
+		BOOST_LOG_TRIVIAL(debug) << "Adding rule " << originalRule.tostring(program,&layer) << " to execRules";
+		execRules.push_back(originalRule);
+	    }
 	}
 	// countRules holds the total number of rules executed for a input query( depth set as 3)
 	countRules = countRules + 1;
@@ -592,11 +590,18 @@ size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t o
             //BOOST_LOG_TRIVIAL(info) << "Atom " << (int) bodyAtomIdx;
 	    uint8_t nCurrentJoins = this->njoins[bodyAtomIdx];
 	    //BOOST_LOG_TRIVIAL(info) << ruleno;
-	    size_t r = estimateRule(depth, bodyAtomIdx, supplRelations, qsqr, layer,countRules, countIntQueries
-, execRules, queryEstimate);
-            if (nCurrentJoins != 0) {
-                output = r;
+	    size_t r = estimateRule(depth, bodyAtomIdx, supplRelations, qsqr, layer, countRules, countIntQueries
+, execRules);
+	    if (r == 0) {
+		output = 0;
+	    }
+	    else if (nCurrentJoins != 0) {
+		// How to estimate this? Higher nCurrentJoins may incur lower output?
+		if (r > output) {
+		    output = r;
+		}
             } else {
+		// Cartesian product
                 output *= r;
             }
             //BOOST_LOG_TRIVIAL(info) << output;
@@ -655,7 +660,7 @@ void RuleExecutor::evaluate(BindingsTable * input, size_t offsetInput,
                             QSQR * qsqr,
                             EDBLayer &layer) {
 
-
+    BOOST_LOG_TRIVIAL(debug) << "Evaluating rule " << adornedRule.tostring(NULL,NULL) << ", nTUples = " << input->getNTuples() << ", offsetInput = " << offsetInput;
     //Evaluate the rule
     if (input->getNTuples() > offsetInput) {
         //Get the new tuples. All the tuples that merge with the head of the

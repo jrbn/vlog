@@ -210,14 +210,14 @@ void Reasoner::cleanBindings(std::vector<Term_t> &possibleValuesJoins, std::vect
 
 size_t Reasoner::estimate(Literal &query, std::vector<uint8_t> *posBindings,
                           std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                          Program &program, bool queryEstimate) {
+                          Program &program, int *countRules, int *countIntQueries, int *countUniqRules) {
 
     QSQQuery rootQuery(query);
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
                                           new QSQR(layer, &program));
     TupleTable *cardTable = NULL;
     cardTable = evaluator->evaluateQuery(QSQR_EST, &rootQuery,
-                                         posBindings, valueBindings, true, queryEstimate);
+                                         posBindings, valueBindings, true, countRules, countIntQueries, countUniqRules);
     size_t estimate = cardTable->getRow(0)[0];
     delete cardTable;
     return estimate;
@@ -302,6 +302,11 @@ TupleIterator *Reasoner::getIterator(Literal &query,
 	}
 	*/
     }
+    if (query.getPredicate().getType() == EDB) {
+	BOOST_LOG_TRIVIAL(info) << "Using edb for " << query.tostring(&program, &edb);
+	return Reasoner::getEDBIterator(query, posJoins, possibleValuesJoins, edb,
+				    returnOnlyVars, sortByFields);
+    }
     if (posJoins == NULL || posJoins->size() < query.getNVars() || returnOnlyVars || posJoins->size() > 1) {
 	ReasoningMode mode = chooseMostEfficientAlgo(query, edb, program, posJoins, possibleValuesJoins);
 	if (mode == MAGIC) {
@@ -366,7 +371,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
 
     TupleTable *outputTable;
     if (returnOnlyVars) {
-	outputTable = tempTable;
+	outputTable = tempTable1;
     } else {
 	outputTable = new TupleTable(3);
 	uint64_t val[3];
@@ -379,6 +384,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
 		val[newPosJoins[i]] = current[i];
 	    }
 	}
+	outputTable->addRow(val);
 	delete tempTable1;
     }
 
@@ -437,7 +443,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
 
                 //Launch only the single rule
                 TupleTable *tmpTable = evaluator.evaluateQuery(QSQR_EVAL, &rootQuery, &newPosJoins,
-                                       possibleValuesJoins, returnOnlyVars, false);
+                                       possibleValuesJoins, returnOnlyVars, NULL, NULL, NULL);
 
                 if (tmpTable != NULL) {
                     //Clean the bindings
@@ -674,6 +680,98 @@ TupleIterator *Reasoner::getMagicIterator(Literal &query,
     }
 }
 
+TupleIterator *Reasoner::getMaterializationIterator(Literal &query,
+        std::vector<uint8_t> *posJoins,
+	std::vector<Term_t> *possibleValuesJoins,
+	EDBLayer &edb, Program &program, bool returnOnlyVars,
+	std::vector<uint8_t> *sortByFields) {
+
+    Predicate pred = query.getPredicate();
+    VTuple tuple = query.getTuple();
+    if (pred.getType() == EDB) {
+	BOOST_LOG_TRIVIAL(info) << "Using edb for " << query.tostring(&program, &edb);
+	return Reasoner::getEDBIterator(query, posJoins, possibleValuesJoins, edb,
+				returnOnlyVars, sortByFields);
+    }
+
+    if (posJoins != NULL) {
+	BOOST_LOG_TRIVIAL(info) << "getMaterializationIterator with joins not implemented yet";
+	throw 10;
+    }
+    
+    // Run materialization
+   SemiNaiver *sn = new SemiNaiver(program.getAllRules(),
+		      edb, &program, true, true,
+		      false, -1, false);
+
+    sn->run();
+
+    //To use if the flag returnOnlyVars is set to false
+    uint64_t outputTuple[3];    // Used in trident method, so no Term_t
+    uint8_t nPosToCopy = 0;
+    uint8_t posToCopy[3];
+    for (int j = 0; j < query.getTupleSize(); ++j) {
+	if (!query.getTermAtPos(j).isVariable()) {
+	    outputTuple[j] = query.getTermAtPos(j).getValue();
+	} else {
+	    posToCopy[nPosToCopy++] = j;
+	}
+    }
+
+    FCIterator tableIt = sn->getTable(pred.getId());
+
+    TupleTable *finalTable;
+    if (returnOnlyVars) {
+	finalTable = new TupleTable(query.getNVars());
+    } else {
+	finalTable = new TupleTable(query.getTupleSize());
+    }
+    while (! tableIt.isEmpty()) {
+	std::shared_ptr<const FCInternalTable> table = tableIt.getCurrentTable();
+	FCInternalTableItr *itrTable = table->getIterator();
+	while (itrTable->hasNext()) {
+	    itrTable->next();
+	    bool copy = true;
+	    for (int i = 0; i < tuple.getSize(); i++) {
+		if (! tuple.get(i).isVariable()) {
+		    if (itrTable->getCurrentValue(i) != tuple.get(i).getValue()) {
+			copy = false;
+			break;
+		    }
+		}
+	    }
+	    if (! copy) {
+		continue;
+	    }
+	    for (int i = 0; i < tuple.getSize(); i++) {
+		if (! returnOnlyVars || tuple.get(i).isVariable()) {
+		    finalTable->addValue(itrTable->getCurrentValue(i));
+		}
+	    }
+
+	}
+	table->releaseIterator(itrTable);
+	tableIt.moveNextCount();
+    }
+
+    std::shared_ptr<TupleTable> pFinalTable(finalTable);
+    delete sn;
+
+    if (sortByFields != NULL && !sortByFields->empty()) {
+        std::shared_ptr<TupleTable> sortTab = std::shared_ptr<TupleTable>(
+                pFinalTable->sortBy(*sortByFields));
+        return new TupleTableItr(sortTab);
+
+    } else {
+        return new TupleTableItr(pFinalTable);
+    }
+}
+
+void Reasoner::getMetrics(Literal &query, std::vector<uint8_t> *posBindings, std::vector<Term_t> *valueBindings,
+	    EDBLayer &layer, Program &program, Metrics &metrics) {
+    metrics.estimate = estimate(query, posBindings, valueBindings, layer, program, &metrics.countRules, &metrics.countIntermediateQueries, &metrics.countUniqueRules);
+}
+
 ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
         EDBLayer &layer, Program &program,
         std::vector<uint8_t> *posBindings,
@@ -691,7 +789,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
 	// Fixed adornments in predicate of literal below.
 	Predicate pred1(query.getPredicate(), Predicate::calculateAdornment(newTuple));
         Literal newLiteral(pred1, newTuple);
-        size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program,false);
+        size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program, NULL, NULL, NULL);
         BOOST_LOG_TRIVIAL(debug) << "SingleCost is " <<
                                  singleCost << " nBindings " << (valueBindings->size() / posBindings->size());
 
@@ -704,7 +802,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
                 limitedValueBindings.push_back(valueBindings->at(i));
             }
             uint64_t tenCost = estimate(query, posBindings,
-                                        &limitedValueBindings, layer, program,false);
+                                        &limitedValueBindings, layer, program, NULL, NULL, NULL);
             BOOST_LOG_TRIVIAL(debug) << "TenCost is " << tenCost;
 
             //y = mx + b. m is slope, b is constant.
@@ -716,7 +814,9 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
             cost = singleCost;
         }
     } else {
-        cost = estimate(query, NULL, NULL, layer, program, true);
+	Metrics metrics;
+	getMetrics(query, NULL, NULL, layer, program, metrics);
+	BOOST_LOG_TRIVIAL(info) << "Vector: est " << metrics.estimate << ", countRules " << metrics.countRules << ", countIntQueries " << metrics.countIntermediateQueries << ", countUniqRules " << metrics.countUniqueRules << ", decision " << (cost < threshold ? "qsqr" : "magic");
     }
     ReasoningMode mode = cost < threshold ? TOPDOWN : MAGIC;
     BOOST_LOG_TRIVIAL(debug) << "Deciding whether I should resolve " <<
@@ -724,6 +824,46 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
                              " with magic or QSQR. Estimated cost: " <<
                              cost << " threshold for QSQ-R is " << threshold;
     return mode;
+}
+
+TupleIterator *Reasoner::getEDBIterator(Literal &query,
+        std::vector<uint8_t> *posJoins,
+        std::vector<Term_t> *possibleValuesJoins,
+        EDBLayer &edb, bool returnOnlyVars,
+        std::vector<uint8_t> *sortByFields) {
+    QSQQuery qsqquery(query);
+    int nVars = query.getNVars();
+    TupleTable *table = new TupleTable(nVars);
+    edb.query(&qsqquery, table, posJoins, possibleValuesJoins);
+    std::shared_ptr<TupleTable> ptable = std::shared_ptr<TupleTable>(table);
+    if (! returnOnlyVars && nVars != 3) {
+	VTuple v = query.getTuple();
+	TupleTable *newTable = new TupleTable(3);
+	TupleIterator *itr = new TupleTableItr(ptable);
+	while (itr->hasNext()) {
+	    itr->next();
+	    uint64_t row[3];
+	    int cnt = 0;
+	    for (int i = 0; i < 3; i++) {
+		if (v.get(i).isVariable()) {
+		    row[i] = itr->getElementAt(cnt);
+		    cnt++;
+		} else {
+		    row[i] = v.get(i).getValue();
+		}
+	    }
+	    newTable->addRow(row);
+	}
+	ptable = std::shared_ptr<TupleTable>(newTable);
+    }
+    //Add sort by if requested
+    if (sortByFields != NULL && !sortByFields->empty()) {
+        std::shared_ptr<TupleTable> sortTab = std::shared_ptr<TupleTable>(
+                ptable->sortBy(*sortByFields));
+        return new TupleTableItr(sortTab);
+    } else {
+        return new TupleTableItr(ptable);
+    }
 }
 
 TupleIterator *Reasoner::getTopDownIterator(Literal &query,
@@ -753,7 +893,7 @@ TupleIterator *Reasoner::getTopDownIterator(Literal &query,
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(new QSQR(edb, &program));
     TupleTable *finalTable;
     finalTable = evaluator->evaluateQuery(QSQR_EVAL, &rootQuery, newPosJoins.size() > 0 ? &newPosJoins : NULL,
-                                          possibleValuesJoins, returnOnlyVars,true);
+                                          possibleValuesJoins, returnOnlyVars, NULL, NULL, NULL);
 
     //Return an iterator of the bindings
     std::shared_ptr<TupleTable> pFinalTable(finalTable);
