@@ -69,6 +69,7 @@ public:
                                           std::vector<uint8_t> *posBindings,
                                           std::vector<Term_t> *valueBindings);
 
+
     TupleIterator *getIterator(Literal &query,
                                            std::vector<uint8_t> * posJoins,
                                            std::vector<Term_t> *possibleValuesJoins,

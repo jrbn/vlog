@@ -416,6 +416,7 @@ void RuleExecutor::evaluateRule(const uint8_t bodyAtom,
             std::vector<Term_t> bindings = supplRelations[bodyAtom]->
                                            getUniqueSortedProjection(
                                                posJoinsSupplRel);
+
 	    // posJoinsLiteral is variable position, so for instance 1 means second variable.
 	    // However, in edb layer, it means position in query, which may also contain constants.
 	    // So, replace by variable positions in query.
@@ -550,7 +551,8 @@ void RuleExecutor::printLineage(std::vector<LineageInfo> &lineage) {
 
 size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t offsetInput,*/ QSQR * qsqr,
                               EDBLayer &layer, const int ruleno,int &countRules, int &countIntQueries,std::vector<Rule> &execRules) {
-    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(program,&layer) << ", depth = " << depth << ", nTUples = " << input->getNTuples();
+    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(program,&layer) << ", depth = " << depth << ", nTuples = " << input->getNTuples();
+
     size_t output = 0;
     //if (input->getNTuples() > offsetInput) {
     //Get the new tuples. All the tuples that merge with the head of the
@@ -660,7 +662,7 @@ void RuleExecutor::evaluate(BindingsTable * input, size_t offsetInput,
                             QSQR * qsqr,
                             EDBLayer &layer) {
 
-    BOOST_LOG_TRIVIAL(debug) << "Evaluating rule " << adornedRule.tostring(NULL,NULL) << ", nTUples = " << input->getNTuples() << ", offsetInput = " << offsetInput;
+    BOOST_LOG_TRIVIAL(debug) << "Evaluating rule " << adornedRule.tostring(NULL,NULL) << ", nTuples = " << input->getNTuples() << ", offsetInput = " << offsetInput;
     //Evaluate the rule
     if (input->getNTuples() > offsetInput) {
         //Get the new tuples. All the tuples that merge with the head of the
