@@ -49,7 +49,7 @@ def getURI(uri):
             return uri
         prefx = uri[:uri.find(':')]
         if prefx not in prefixes:
-            print 'Prefix not found: ' + prefx + ', URI = ' + uri
+            print ('Prefix not found: ' + prefx + ', URI = ' + uri)
             raise Exception('Prefix not found: ')
         else:
             prefx = prefixes[prefx]
@@ -197,7 +197,7 @@ def parsePrefix(prefixes, prefix):
     uri = prefix[prefix.find(" ") + 2:-1]
     prefixes[id] = uri
 
-print 'Extracting rules and input from ' + sys.argv[1]
+print ('Extracting rules and input from ' + sys.argv[1])
 
 for line in open(sys.argv[1], 'r'):
     line = line.strip()
@@ -222,28 +222,28 @@ def cleanup():
 
 f1 = open("./.rules", 'w+')
 for rule in edbRules:
-    print >> f1, rule
+    print (f1, rule, file=sys.stderr)
 for rule in newRules:
-    print >> f1, rule
+    print (f1, rule, file=sys.stderr)
 f1.close()
 
 ensure_dir("./.data/input")
 f1 = open("./.data/input", 'w+')
 for item in inputs:
-    print >> f1, item
+    print (f1, item,file=sys.stderr)
 f1.close()
 
-print 'Generating database ...'
+print ('Generating database ...')
 os.system("rm -rf ./.data/database")
 os.system("./vlog load -i ./.data/input -o ./.data/database")
 
 f1 = open("./.edbconf", 'w+')
-print >> f1, "EDB0_predname=TE"
-print >> f1, "EDB0_type=Trident"
-print >> f1, "EDB0_param0=./.data/database"
+print  (f1, "EDB0_predname=TE",file=sys.stderr)
+print  (f1, "EDB0_type=Trident",file=sys.stderr)
+print  (f1, "EDB0_param0=./.data/database",file=sys.stderr)
 f1.close()
 
-print 'Materializing ...'
+print ('Materializing ...')
 os.system("./vlog mat -e ./.edbconf --rules ./.rules -l info --storemat_format db --storemat_path ./.data/database")
 
 cleanup()
