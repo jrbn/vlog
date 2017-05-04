@@ -132,19 +132,21 @@ void QSQR::createRules(Predicate &pred) {
     }
 }
 
-size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/) {
+size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries, std::vector<Rule> &execRules) {
 
-    if (depth > 2) {
-        return 0;
+    if (depth > 4) {
+	// Question is: what to return here. Assume no results? Assume 1 result?
+        return 1;
     }
-
+ 
+    countIntQueries++;
     createRules(pred);
-
     std::vector<size_t> outputs;
-    size_t output = 0;
+    size_t output = 0;	
     for (int i = 0; i < program->getAllRulesByPredicate(pred.getId())->size(); ++i) {
         RuleExecutor *exec = rules[pred.getId()][pred.getAdorment()][i];
-        size_t r = exec->estimate(depth + 1, inputTable/*, offsetInput*/, this, layer);
+        size_t r = exec->estimate(depth + 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries,execRules);
+	//BOOST_LOG_TRIVIAL(info) << "Rule" << i << "\n" << "counter" << dCounter;
 	if (r != 0) {
 	    // if (depth > 0 || r <= 10) {
 		output += r;
@@ -265,10 +267,13 @@ void QSQR::processTask(QSQR_Task &task) {
 TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
                                 std::vector<uint8_t> *posJoins,
                                 std::vector<Term_t> *possibleValuesJoins,
-                                bool returnOnlyVars/*,
-                                const Timeout * const timeout*/) {
+                                bool returnOnlyVars,/*,
+                                const Timeout * const timeout*/int *cR, int *cIQ, int *cUR) {
 
     Predicate pred = query->getLiteral()->getPredicate();
+    int countRules =0;
+    int countIntQueries =0;
+    std::vector<Rule> execRules; 
     if (pred.getType() == EDB) {
         if (evaluateOrEstimate == QSQR_EVAL) {
             uint8_t nvars = query->getLiteral()->getNVars();
@@ -336,13 +341,22 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
 #endif
 
                 } else {
-                    TupleTable *output = new TupleTable(1);
-                    uint64_t est = estimate(0, pred2, inputTable/*, 0*/);
+		    TupleTable *output = new TupleTable(1);
+                    uint64_t est = estimate(-1, pred2, inputTable/*, 0*/,countRules,countIntQueries,execRules);
 		    // Incorporate size of possible join values?
 		    // Useless, I think, because in the planning phase, we don't actually have more than
 		    // one possiblevaluesjoin. --Ceriel
 		    est = est + (est * (possibleValuesJoins->size() / posJoins->size() - 1)) / 10; 
                     output->addRow(&est);
+		    if (cR != NULL) {
+			*cR = countRules;
+		    }
+		    if (cIQ != NULL) {
+			*cIQ = countIntQueries;
+		    }
+		    if (cUR != NULL) {
+			*cUR = execRules.size();
+		    }
                     return output;
                 }
             } else {
@@ -361,11 +375,23 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
                         processTask(task);
                     }
 #endif
-
+		
                 } else { //ESTIMATE
                     TupleTable *output = new TupleTable(1);
-                    uint64_t est = estimate(0, pred, inputTable/*, 0*/);
-                    output->addRow(&est);
+		    uint64_t est = estimate(-1, pred, inputTable/*, 0*/,countRules, countIntQueries,execRules);
+		    BOOST_LOG_TRIVIAL(debug) << "No of Rules Executed(depth of 3) : " << countRules;
+		    BOOST_LOG_TRIVIAL(debug) << "No of Intermediate Queries" << countIntQueries;	
+		    BOOST_LOG_TRIVIAL(debug) << "No of Unique Rules" << execRules.size();
+		    output->addRow(&est);
+		    if (cR != NULL) {
+			*cR = countRules;
+		    }
+		    if (cIQ != NULL) {
+			*cIQ = countIntQueries;
+		    }
+		    if (cUR != NULL) {
+			*cUR = execRules.size();
+		    }
                     return output;
                 }
             }
@@ -380,6 +406,15 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
         const Literal *l = query->getLiteral();
         BindingsTable *answer = getAnswerTable(l->getPredicate(), adornment);
 
+	if (cR != NULL) {
+	    *cR = countRules;
+	}
+	if (cIQ != NULL) {
+	    *cIQ = countIntQueries;
+	}
+	if (cUR != NULL) {
+	    *cUR = execRules.size();
+	}
         if (returnOnlyVars) {
             //raiseIfExpired();
             return answer->projectAndFilter(*l, posJoins, possibleValuesJoins);

@@ -9,8 +9,9 @@ RuleExecutor::RuleExecutor(Rule &rule, uint8_t headAdornment
                            , Program *program,
                            EDBLayer &layer
                           ) :
-    adornedRule(rule.createAdornment(headAdornment))
-    , program(program), layer(layer)
+    originalRule(rule),
+    adornedRule(rule.createAdornment(headAdornment)),
+    program(program), layer(layer)
 {
     calculateJoinsSizeIntermediateRelations();
 }
@@ -240,7 +241,7 @@ bool RuleExecutor::isUnifiable(const Term_t * const value, const size_t sizeTupl
 }
 
 size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
-                                  BindingsTable **supplRelations, QSQR* qsqr, EDBLayer &layer) {
+                                  BindingsTable **supplRelations, QSQR* qsqr, EDBLayer &layer, int &countRules, int &countIntQueries, std::vector<Rule> &execRules) {
     TupleTable *retrievedBindings = NULL;
     Literal l = adornedRule.getBody()[bodyAtom];
     uint8_t nCurrentJoins = this->njoins[bodyAtom];
@@ -255,12 +256,19 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
     }
 
     if (l.getPredicate().getType() == EDB) {
+	// posJoinsLiteral is variable position, so for instance 1 means second variable.
+	// However, in edb layer, it means position in query, which may also contain constants.
+	// So, replace by variable positions in query.
+	std::vector<uint8_t> posJoinsLiteral1;
+	for (int i = 0; i < posJoinsLiteral.size(); i++) {
+	    posJoinsLiteral1.push_back(l.getPosVars()[posJoinsLiteral[i]]);
+	}
         if (bodyAtom < adornedRule.getBody().size() - 1) {
             retrievedBindings = new TupleTable(l.getNVars());
             QSQQuery query(l);
             if (nCurrentJoins > 0) {
                 std::vector<Term_t> bindings = supplRelations[bodyAtom]->getProjection(posJoinsSupplRel);
-                layer.query(&query, retrievedBindings, &posJoinsLiteral, &bindings);
+                layer.query(&query, retrievedBindings, &posJoinsLiteral1, &bindings);
             } else {
                 layer.query(&query, retrievedBindings, NULL, NULL);
             }
@@ -273,22 +281,37 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
                     //Modify l
                     VTuple t = l.getTuple();
                     for (int j = 0; j < nCurrentJoins; ++j) {
-                        t.set(VTerm(0, bindings[i + j]), posJoinsLiteral[j]);
+                        t.set(VTerm(0, bindings[i + j]), posJoinsLiteral1[j]);
                     }
                     Literal query(l.getPredicate(), t);
-                    card += layer.estimateCardinality(query);
+                    size_t result = layer.estimateCardinality(query);
+		    BOOST_LOG_TRIVIAL(debug) << "Literal " << query.tostring(program, &layer) << ", Estimate from EDB " << result;
+		    card += result;
                 }
                 return card;
             } else {
                 //QSQQuery query(l);
-                return layer.estimateCardinality(l);
+                size_t result = layer.estimateCardinality(l);
+		BOOST_LOG_TRIVIAL(debug) << "Literal " << l.tostring(program, &layer) << ", Estimate from EDB " << result;
+		return result;
             }
         }
     } else {
-        QSQQuery query(l);
-        //Copy in input the query that we are about to launch
+	QSQQuery query(l);
+    /*    
+	for (int i=0; i< 3;i++)
+	{ 
+	VTerm term = l.getTuple().get(i);
+	BOOST_LOG_TRIVIAL(info) << "Input Modification\t" <<(int) bodyAtom << "query value" << term.getValue() << "Id" <<(int)term.getId();        
+	}*/
+	//Copy in input the query that we are about to launch
         BindingsTable *table = qsqr->getInputTable(query.getLiteral()->getPredicate());
         //size_t offsetInput = table->getNTuples();
+	
+	BOOST_LOG_TRIVIAL(debug) << "posFromSupplRelation[bodyAtom].size() = " << posFromSupplRelation[bodyAtom].size();
+	BOOST_LOG_TRIVIAL(debug) << "posFromLiteral[bodyAtom].size() = " << posFromLiteral[bodyAtom].size();
+	BOOST_LOG_TRIVIAL(debug) << "table = " << table << ", supplRelations[bodyAtom] = " << supplRelations[bodyAtom];
+
         if (posFromSupplRelation[bodyAtom].size() == 0) {
             if (posFromLiteral[bodyAtom].size() == 0) {
                 table->addRawTuple(NULL);
@@ -315,18 +338,21 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
                 for (std::vector<std::pair<uint8_t, uint8_t>>::iterator itr = pairs.begin();
                         itr != pairs.end(); ++itr) {
                     tmpRow[itr->second] = tuple[itr->first];
+		    BOOST_LOG_TRIVIAL(debug) << "itr = (" << itr->first << ", " <<  itr->second << ")";
                 }
+		//BOOST_LOG_TRIVIAL(info) << "tmpRow" << *tmpRow;
                 table->addRawTuple(tmpRow);
             }
         }
         //Call the query if there are new queries
         //if (table->getNTuples() > offsetInput) {
         Predicate pred = query.getLiteral()->getPredicate();
-        return qsqr->estimate(depth, pred, table/*, offsetInput*/);
+        return qsqr->estimate(depth, pred, table/*, offsetInput*/, countRules, countIntQueries,execRules);
         //} else {
         //    return 0;
         //}
     }
+
 
     //I arrive here only if the query is EDB and it is not the last one
     if (retrievedBindings == NULL || retrievedBindings->getNRows() == 0) {
@@ -360,7 +386,10 @@ size_t RuleExecutor::estimateRule(const int depth, const uint8_t bodyAtom,
             throw 10;
         }
     }
-
+  /*  for (size_t i = 0; i < retrievedBindings->getNRows(); ++i) {	
+    BOOST_LOG_TRIVIAL(info) << "Intermediate Values" << *supplRelations[bodyAtom + 1]->getTuple(i) << "\n";
+    }*/
+    
     if (retrievedBindings != NULL) {
         delete retrievedBindings;
     }
@@ -399,6 +428,7 @@ void RuleExecutor::evaluateRule(const uint8_t bodyAtom,
             std::vector<Term_t> bindings = supplRelations[bodyAtom]->
                                            getUniqueSortedProjection(
                                                posJoinsSupplRel);
+
 	    // posJoinsLiteral is variable position, so for instance 1 means second variable.
 	    // However, in edb layer, it means position in query, which may also contain constants.
 	    // So, replace by variable positions in query.
@@ -451,7 +481,7 @@ void RuleExecutor::evaluateRule(const uint8_t bodyAtom,
 
         //Call the query if there are new queries
         if (table->getNTuples() > offsetInput) {
-            Predicate pred = query.getLiteral()->getPredicate();
+	    Predicate pred = query.getLiteral()->getPredicate();
 #ifdef RECURSIVE_QSQR
             qsqr->evaluate(pred, table, offsetInput);
 #else
@@ -532,45 +562,80 @@ void RuleExecutor::printLineage(std::vector<LineageInfo> &lineage) {
 #endif
 
 size_t RuleExecutor::estimate(const int depth, BindingsTable * input,/* size_t offsetInput,*/ QSQR * qsqr,
-                              EDBLayer &layer) {
-    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(NULL,NULL) << ", depth = " << depth << ", nTUples = " << input->getNTuples();
+                              EDBLayer &layer, const int ruleno,int &countRules, int &countIntQueries,std::vector<Rule> &execRules) {
+    BOOST_LOG_TRIVIAL(debug) << "Estimating rule " << adornedRule.tostring(program,&layer) << ", depth = " << depth << ", nTuples = " << input->getNTuples();
+
     size_t output = 0;
     //if (input->getNTuples() > offsetInput) {
     //Get the new tuples. All the tuples that merge with the head of the
     //adorned rule are being copied in the first supplementary relation
     BindingsTable **supplRelations = createSupplRelations();
-
     //Copy all the tuples that are unifiable with the head in the first
     //supplementary relation.
+
     for (size_t i = /*offsetInput*/0; i < input->getNTuples(); ++i) {
         const Term_t* tuple = input->getTuple(i);
         if (isUnifiable(tuple, input->getSizeTuples(), input->getPosFromAdornment(), layer)) {
-            supplRelations[0]->addTuple(tuple);
+            supplRelations[0]->addTuple(tuple);	
         }
     }
 
+    BOOST_LOG_TRIVIAL(debug) << "supplRelations[0]->getNTuples() = " << supplRelations[0]->getNTuples();
+
+    // The test below is a problem. Suppose we have a rule
+    // RP1 :- RP2 RP3 RP4, and we are dealing with a rule for RP4 as a result of this RP1 rule.
+    // Then, its input will be empty, because there is no explicit storage for the join of RP2 and RP3, even though we may estimate
+    // that it is not empty. TODO TODO TODO, but what??? --Ceriel
     if (supplRelations[0]->getNTuples() > 0) {
+	// If estimate() is called to get query statistics, following code will populate the execRules to get the No of unique rules executed.
+	// TODO: this is not very efficient: linear search. Maybe just use a bitset to mark each rule? Each rule
+	// should then have some index number associated with it.
+	if (countRules == 0) {
+	    // BOOST_LOG_TRIVIAL(debug) << "Adding rule " << originalRule.tostring(program,&layer) << " to execRules";
+	    execRules.push_back(originalRule);
+	} else {
+	    bool exists = false;
+	    for (std::vector<Rule>::iterator itr = execRules.begin(); itr != execRules.end() && ! exists; itr++) {
+		exists = itr->getHead() == originalRule.getHead() && itr->getBody() == originalRule.getBody();
+		// BOOST_LOG_TRIVIAL(debug) << "Comparing rule " << originalRule.tostring(program,&layer) << " with rule " << itr->tostring(program, &layer) << " results in " << exists;
+	    }
+	    if(!exists) {
+		// BOOST_LOG_TRIVIAL(debug) << "Adding rule " << originalRule.tostring(program,&layer) << " to execRules";
+		execRules.push_back(originalRule);
+	    }
+	}
+	// countRules holds the total number of rules executed for a input query( depth set as 3)
+	countRules = countRules + 1;
         uint8_t bodyAtomIdx = 0;
 	output = 1;
         do {
             //BOOST_LOG_TRIVIAL(info) << "Atom " << (int) bodyAtomIdx;
 	    uint8_t nCurrentJoins = this->njoins[bodyAtomIdx];
-	    size_t r = estimateRule(depth, bodyAtomIdx, supplRelations, qsqr, layer);
-            if (nCurrentJoins != 0) {
-                output = r;
+	    //BOOST_LOG_TRIVIAL(info) << ruleno;
+	    size_t r = estimateRule(depth, bodyAtomIdx, supplRelations, qsqr, layer, countRules, countIntQueries, execRules);
+	    if (r == 0) {
+		output = 0;
+	    }
+	    else if (nCurrentJoins != 0) {
+		// How to estimate this? Higher nCurrentJoins may incur lower output?
+		if (r > output) {
+		    output = r;
+		}
             } else {
+		// Cartesian product
                 output *= r;
             }
-	    BOOST_LOG_TRIVIAL(debug) << "Atom: " << (int) bodyAtomIdx << ", estimate: " << r << ", output: " << output;
+            //BOOST_LOG_TRIVIAL(info) << output;
+	    //BOOST_LOG_TRIVIAL(info) << "Atom: " << (int) bodyAtomIdx << ", estimate: " << r << ", output: " << output;
 	    bodyAtomIdx++;
         } while (output != 0 && bodyAtomIdx < adornedRule.getBody().size()
-                 && supplRelations[bodyAtomIdx]->getNTuples() > 0);
+                 /* && supplRelations[bodyAtomIdx]->getNTuples() > 0 */);
+	/*
 	if (bodyAtomIdx < adornedRule.getBody().size()) {
 	    output = 0;
 	}
-
+	*/
     }
-
     // Leaked supplRelations. Added line below. --Ceriel
     deleteSupplRelations(supplRelations);
     //}
@@ -617,7 +682,7 @@ void RuleExecutor::evaluate(BindingsTable * input, size_t offsetInput,
                             QSQR * qsqr,
                             EDBLayer &layer) {
 
-    BOOST_LOG_TRIVIAL(debug) << "Evaluating rule " << adornedRule.tostring(NULL,NULL) << ", nTUples = " << input->getNTuples() << ", offsetInput = " << offsetInput;
+    BOOST_LOG_TRIVIAL(debug) << "Evaluating rule " << adornedRule.tostring(NULL,NULL) << ", nTuples = " << input->getNTuples() << ", offsetInput = " << offsetInput;
     //Evaluate the rule
     if (input->getNTuples() > offsetInput) {
         //Get the new tuples. All the tuples that merge with the head of the
@@ -636,6 +701,7 @@ void RuleExecutor::evaluate(BindingsTable * input, size_t offsetInput,
 
         size_t cnt = supplRelations[0]->getNTuples();
         if (cnt > 0) {
+	
 #ifdef RECURSIVE_QSQR
             uint8_t bodyAtomIdx = 0;
             do {

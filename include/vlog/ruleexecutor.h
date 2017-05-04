@@ -32,6 +32,7 @@ struct LineageInfo {
 
 class RuleExecutor {
 private:
+    Rule originalRule;
     Rule adornedRule;
 
 //    boost::chrono::system_clock::time_point startEvaluation;
@@ -77,7 +78,7 @@ private:
 
     size_t estimateRule(const int depth, const uint8_t bodyAtom,
                           BindingsTable **supplRelations,
-                          QSQR *qsqr, EDBLayer &layer);
+                          QSQR *qsqr, EDBLayer &layer, int &countRules, int &countIntQueries, std::vector<Rule> &execRules);
 
     void evaluateRule(const uint8_t bodyAtom, BindingsTable **supplRelations,
                       QSQR *qsqr, EDBLayer &layer
@@ -105,10 +106,10 @@ public:
                 );
 
     size_t estimate(const int depth, BindingsTable *input/*, size_t offsetInput*/, QSQR *qsqr,
-                      EDBLayer &edbLayer);
+                      EDBLayer &edbLayer, const int ruleno, int &countRules, int &countIntQueries, std::vector<Rule> &execRules);
 
     void evaluate(BindingsTable *input, size_t offsetInput, QSQR *qsqr,
-                  EDBLayer &edbLayer
+                  EDBLayer &edbLaye
 #ifdef LINEAGE
                   , std::vector<LineageInfo> &lineage
 #endif

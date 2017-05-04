@@ -16,6 +16,13 @@
 
 typedef enum {TOPDOWN, MAGIC} ReasoningMode;
 
+struct Metrics {
+    size_t estimate;
+    int countRules;
+    int countIntermediateQueries;
+    int countUniqueRules;
+};
+
 class Reasoner {
 private:
 
@@ -48,12 +55,20 @@ public:
 
     size_t estimate(Literal &query, std::vector<uint8_t> *posBindings,
                     std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                    Program &program);
+                    Program &program, int *countRules, int *countIntQueries, int *countUniqRules);
+
+    void getMetrics(Literal &query,
+	            std::vector<uint8_t> *posBindings,
+		    std::vector<Term_t> *valueBindings,
+		    EDBLayer &layer,
+		    Program &program,
+		    Metrics &metrics);
 
     ReasoningMode chooseMostEfficientAlgo(Literal &query,
                                           EDBLayer &layer, Program &program,
                                           std::vector<uint8_t> *posBindings,
                                           std::vector<Term_t> *valueBindings);
+
 
     TupleIterator *getIterator(Literal &query,
                                            std::vector<uint8_t> * posJoins,
