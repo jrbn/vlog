@@ -247,6 +247,8 @@ def parseRulesFile(rulesFile):
                     print ("generating queries for ", rule)
                     generateQueries(rule, arityMap[rule], resultRecords)
                     break
+            else:
+                atomIndex += 1
 
 resultFiles = []
 args = parse_args()
