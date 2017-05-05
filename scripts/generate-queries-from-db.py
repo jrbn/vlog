@@ -117,19 +117,65 @@ def generateQueries(rule, arity, resultRecords):
 
 '''
 Takes rule file and rule names array as the input
-For every rule checks if we got any resul
+For every rule checks if we got any result
 '''
+'''
+RP361(Y) :- RP361(X0),RP307(X0,Y)
+RP27(A,B) :- TE(A,<http://dbpedia.org/ontology/Galaxy/surfaceArea>,B)
+RP20(<http://ruliee/contradiction>) :- RP21(X1,<http://www.w3.org/2001/XMLSchema#double>),RP158(X,X1)
+RP54(X) :- RP159(X,X1)
+'''
+def get_atoms(body):
+    atoms = []
+    startIndex = 0
+    while True:
+        index = body.find(')', startIndex)
+        if index == -1:
+            break
+        atoms.append(body[startIndex:index+1])
+        startIndex = index+2
+    return atoms
+
 def parseRulesFile(rulesFile):
     exploredRules = set()
+    rulesMap = {}
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
             head = line.split(':')[0]
-            body = line.split('-')[1]
+            body = line.split(':-')[1]
             rule = head.split('(')[0]
 
-            query = line[line.find("TE"):]
-            query = query.strip()
+            body = body.strip()
+            atoms = get_atoms(body)
+            if rule in rulesMap:
+                for atom in atoms:
+                    rulesMap[rule].append(atom)
+            else:
+                for i, atom in enumerate(atoms):
+                    if i == 0:
+                        rulesMap[rule] = [atom]
+                    else:
+                        rulesMap[rule].append(atom)
+
+    # Use rulesMap to go over each rule and its possible implications
+    for key in rulesMap.keys():
+        print("Rule ", key , ":")
+        atomIndex = 0
+        while atomIndex < len(rulesMap[key]):
+            atom = rulesMap[key][atomIndex]
+            print("Checking atom ", atom)
+            if atom.find("TE") == 0:
+                query = atom
+                query = query.strip()
+            else:
+                newRule = atom.split('(')[0]
+                query = rulesMap[newRule][0]
+                if query.find("TE") != 0:
+                    print("Rule ", newRule, "does not derive anything useful: ", rulesMap[newRule])
+                else:
+                    query = query.strip()
+
             timeoutQSQR = False
             try:
                 outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', query], stderr=STDOUT, timeout=ARG_TIMEOUT)
@@ -140,22 +186,23 @@ def parseRulesFile(rulesFile):
             strQSQR = str(outQSQR)
             records = strQSQR.split('\\n')
 
-            resultStatRecord = records[-4]
-            numberOfRows = int(resultStatRecord[resultStatRecord.find("#rows = ") + 8:])
-            if numberOfRows == 0:
-                # apply recursive rule exploration strategy
-                print (rule , " predicate is not in the database")
-                x = 4
-            else:
-                resultRecords = records[3:len(records)-5]
-                columns = records[3].split()
-                arity = len(columns)
-                print ("generating queries for ", rule)
-                generateQueries(rule, arity, resultRecords)
-            # Execute the body as a query using vlog and gather results
-            # If 0 rows are generated, then it means that the predicate of this rule is not present in the database (directly)
-            # and we need to recursively apply the rule. e.g. RP0 : <A, Colleague of, B> is not present in the database.
-            # But we can find RP0: RP29, RP30 in the rules file and RP29 and RP30 have the predicates that are present in the database.
+            if timeoutQSQR == False:
+                resultStatRecord = records[-4]
+                numberOfRows = int(resultStatRecord[resultStatRecord.find("#rows = ") + 8:])
+                if numberOfRows == 0:
+                    # apply recursive rule exploration strategy
+                    print (rule , " predicate is not in the database")
+                    print (atom, " did not produce any result records")
+                    #TODO: rulesMap for this rule should be false, so that other rules will not use this rule to get queries
+                    atomIndex += 1
+                    continue
+                else:
+                    resultRecords = records[3:len(records)-5]
+                    columns = records[3].split()
+                    arity = len(columns)
+                    print ("generating queries for ", rule)
+                    generateQueries(rule, arity, resultRecords)
+                    break
 
 resultFiles = []
 args = parse_args()
