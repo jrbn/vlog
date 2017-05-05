@@ -181,6 +181,7 @@ def get_atoms(body):
 
 def parseRulesFile(rulesFile):
     rulesMap = {}
+    arityMap = {}
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
@@ -190,6 +191,7 @@ def parseRulesFile(rulesFile):
 
             # TODO: compute arity here, so that we can pass it to generate query function
             arity = len(head.split(','))
+            arityMap[rule] = arity
             body = body.strip()
             atoms = get_atoms(body)
             if rule in rulesMap:
@@ -243,7 +245,7 @@ def parseRulesFile(rulesFile):
                 else:
                     resultRecords = records[3:len(records)-5]
                     print ("generating queries for ", rule)
-                    generateQueries(rule, arity, resultRecords)
+                    generateQueries(rule, arityMap[rule], resultRecords)
                     break
 
 resultFiles = []
