@@ -4,9 +4,12 @@ import sys
 import argparse
 from collections import defaultdict
 from random import shuffle
-from subprocess import check_output, STDOUT, TimeoutExpired
+from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 
-
+STR_magic_time = "magic time ="
+STR_qsqr_time = "qsqr time ="
+STR_rows = "#rows ="
+STR_vector = "Vector:"
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
     parser.add_argument('--rules' , type=str, required=True, help = 'Path to the rules file')
@@ -23,7 +26,8 @@ outFile = ""
 
 def generateQueries(rule, arity, resultRecords):
 
-    queries = []
+    queries = set()
+    features = {}
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
     query = rule + "("
@@ -32,7 +36,8 @@ def generateQueries(rule, arity, resultRecords):
         if (i != arity-1):
             query += ","
     query += ")"
-    queries.append(query)
+    queries.add(query)
+    features[query] = [0, 0]
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
@@ -43,7 +48,11 @@ def generateQueries(rule, arity, resultRecords):
                 query = rule + "("
                 for j, column in enumerate(columns):
                     if (a == j):
-                        query += chr(i+65)
+                        if j == 0:
+                            features_value = [0, 1]
+                        else:
+                            features_value = [1, 0]
+                        query += chr(j+65)
                     else:
                         query += column
 
@@ -51,7 +60,8 @@ def generateQueries(rule, arity, resultRecords):
                         query += ","
                 query += ")"
 
-                queries.append(query)
+                queries.add(query)
+                features[query] = features_value
 
     # Boolean queries
     for record in resultRecords:
@@ -70,54 +80,80 @@ def generateQueries(rule, arity, resultRecords):
                 if (j != len(columns) -1):
                     query += ","
             query += ")"
-            queries.append(query)
+            queries.add(query)
+            features[query] = [1, 1]
 
-    shuffle(queries)
-    data = "Query Type QSQR MagicSets"
+    queriesList = list(queries)
+    shuffle(queriesList)
+    data = ""
     iterations = 1
-    for q in queries:
+    for q in queriesList:
         iterations += 1
         if iterations == ARG_NQ:
             break
-        timeoutQSQR = False
+
+        #timeoutQSQR = False
+        #try:
+        #    outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
+        #except TimeoutExpired:
+        #    outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
+        #    timeoutQSQR = True
+
+        #strQSQR = str(outQSQR)
+        #index = strQSQR.find("Runtime =")
+        #timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds", index)-1]
+
+        ##TODO: Find # rows in the output and get the number of records in the result.
+        #index = strQSQR.find("#rows =")
+        #numResultsQSQR = strQSQR[index+8:strQSQR.find("\\n", index)]
+
+        timeout = False
         try:
-            outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
+            output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'both', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT*2)
         except TimeoutExpired:
-            outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-            timeoutQSQR = True
+            output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
+            timeout = True
+        except CalledProcessError:
+            print("Exception raised because of the following query:")
+            print(q)
+            timeout = True
 
-        strQSQR = str(outQSQR)
-        index = strQSQR.find("Runtime =")
-        timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds", index)-1]
+        if timeout == False:
+            output = str(output)
+            index = output.find(STR_magic_time)
+            timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
 
-        #TODO: Find # rows in the output and get the number of records in the result.
-        index = strQSQR.find("#rows =")
-        numResultsQSQR = strQSQR[index+8:strQSQR.find("\\n", index)]
+            index = output.find(STR_qsqr_time)
+            timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
 
-        timeoutMagic = False
-        try:
-            outMagic = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'magic', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
-        except TimeoutExpired:
-            outMagic = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-            timeoutMagic = True
+            index = output.find(STR_rows)
+            numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
 
-        strMagic = str(outMagic)
-        index = strMagic.find("Runtime =")
-        timeMagic = strMagic[index+10:strMagic.find("milliseconds", index)-1]
+            index = output.find(STR_vector)
+            vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
+            vector = vector_str.split(',')
 
-        index = strMagic.find("#rows =")
-        numResultsMagic = strMagic[index+8:strMagic.find("\\n",index)]
+            if float(timeQsqr) < float(timeMagic):
+                winnerAlgorithm = "QSQR"
+            else:
+                winnerAlgorithm = "MagicSets"
 
-        if not timeoutQSQR and not timeoutMagic:
-            if (numResultsQSQR != numResultsMagic):
-                print (numResultsMagic , " : " , numResultsQSQR, "-")
+            allFeatures = features[q]
+            for v in vector:
+                allFeatures.append(v)
+            allFeatures.append(numResults)
+            allFeatures.append(winnerAlgorithm)
 
-        record = str(q)  + " " + str(timeQSQR) + " " + str(timeMagic)
+            record = ""
+            for i, a in enumerate(allFeatures):
+                record += str(a)
+                if (i != len(allFeatures)-1):
+                    record += ","
+            record += "\n"
+            print (q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
+            data += record
 
-        print (record)
-        data += record
-
-    with open(outFile + ".queries", 'a') as fout:
+    with open(outFile + ".csv", 'a') as fout:
         fout.write(data)
 
 
@@ -144,7 +180,6 @@ def get_atoms(body):
     return atoms
 
 def parseRulesFile(rulesFile):
-    exploredRules = set()
     rulesMap = {}
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
