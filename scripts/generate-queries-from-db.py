@@ -13,7 +13,7 @@ def parse_args():
     parser.add_argument('--db', type=str, help = 'Path to the directory where results of rules/predicate are stored')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 30)
-    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 25)
+    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 20)
     parser.add_argument('--out', type=str, help = 'Name of the query output file')
 
     return parser.parse_args()
@@ -56,6 +56,13 @@ def generateQueries(rule, arity, resultRecords):
     # Boolean queries
     for record in resultRecords:
         columns = record.split()
+
+        # TODO: may not be applicable for certain rules
+        # e.g. RP40(A,B) => RP50(X), RP51(X,Y)
+        # Then, results of RP50 will give only one column for booleam queries
+        if (len(columns) != arity):
+            break
+
         for a in range(arity):
             query = rule + "("
             for j, column in enumerate(columns):
@@ -70,7 +77,7 @@ def generateQueries(rule, arity, resultRecords):
     iterations = 1
     for q in queries:
         iterations += 1
-        if iterations == 10:
+        if iterations == ARG_NQ:
             break
         timeoutQSQR = False
         try:
@@ -146,6 +153,8 @@ def parseRulesFile(rulesFile):
             body = line.split(':-')[1]
             rule = head.split('(')[0]
 
+            # TODO: compute arity here, so that we can pass it to generate query function
+            arity = len(head.split(','))
             body = body.strip()
             atoms = get_atoms(body)
             if rule in rulesMap:
@@ -159,11 +168,11 @@ def parseRulesFile(rulesFile):
                         rulesMap[rule].append(atom)
 
     # Use rulesMap to go over each rule and its possible implications
-    for key in rulesMap.keys():
-        print("Rule ", key , ":")
+    for rule in sorted(rulesMap):
+        print("Rule ", rule , ":")
         atomIndex = 0
-        while atomIndex < len(rulesMap[key]):
-            atom = rulesMap[key][atomIndex]
+        while atomIndex < len(rulesMap[rule]):
+            atom = rulesMap[rule][atomIndex]
             print("Checking atom ", atom)
             if atom.find("TE") == 0:
                 query = atom
@@ -198,8 +207,6 @@ def parseRulesFile(rulesFile):
                     continue
                 else:
                     resultRecords = records[3:len(records)-5]
-                    columns = records[3].split()
-                    arity = len(columns)
                     print ("generating queries for ", rule)
                     generateQueries(rule, arity, resultRecords)
                     break
