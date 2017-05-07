@@ -18,8 +18,9 @@ typedef enum {TOPDOWN, MAGIC} ReasoningMode;
 
 struct Metrics {
     size_t estimate;
-    int countRules;
     int countIntermediateQueries;
+    double cost;
+    int countRules;
     int countUniqueRules;
 };
 

@@ -775,7 +775,12 @@ TupleIterator *Reasoner::getMaterializationIterator(Literal &query,
 
 void Reasoner::getMetrics(Literal &query, std::vector<uint8_t> *posBindings, std::vector<Term_t> *valueBindings,
 	    EDBLayer &layer, Program &program, Metrics &metrics) {
-    metrics.estimate = estimate(query, posBindings, valueBindings, layer, program, &metrics.countRules, &metrics.countIntermediateQueries, &metrics.countUniqueRules);
+    std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
+            new QSQR(layer, &program));
+    memset(&metrics, 0, sizeof(Metrics));
+    std::vector<Rule> uniqueRules;
+    evaluator->estimateQuery(metrics, 0, query, uniqueRules);
+    metrics.countUniqueRules = uniqueRules.size();
 }
 
 ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,

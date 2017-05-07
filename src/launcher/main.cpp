@@ -787,7 +787,7 @@ void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reas
     if (algo == "both" || algo == "onlyMetrics") {
 	Metrics m;
 	reasoner.getMetrics(literal, NULL, NULL, edb, p, m);
-	BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: " << m.estimate << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
+	BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
 	if (algo == "both") {
 	    double t2 = runAlgo("magic", literal, edb, p, reasoner, vm);
 	    BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;

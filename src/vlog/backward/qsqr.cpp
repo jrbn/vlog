@@ -136,42 +136,110 @@ size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, s
 
     if (depth > 4) {
 	// Question is: what to return here. Assume no results? Assume 1 result?
-        return 1;
+	return 1;
     }
- 
     countIntQueries++;
     createRules(pred);
     std::vector<size_t> outputs;
-    size_t output = 0;	
+    size_t output = 0; 
     for (int i = 0; i < program->getAllRulesByPredicate(pred.getId())->size(); ++i) {
         RuleExecutor *exec = rules[pred.getId()][pred.getAdorment()][i];
         size_t r = exec->estimate(depth + 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries,execRules);
 	//BOOST_LOG_TRIVIAL(info) << "Rule" << i << "\n" << "counter" << dCounter;
-	if (r != 0) {
+        if (r != 0) {
 	    // if (depth > 0 || r <= 10) {
-		output += r;
+	        output += r;
 	    /*
-	    } else {
-		// Somewhat silly duplicate detection heuristic ...
-		bool found = false;
-		for (int i = 0; i < outputs.size(); i++) {
-		    if (outputs[i] == r) {
-			BOOST_LOG_TRIVIAL(debug) << "Ignoring " << r << " results";
-			// Assume it is the same answer ...
-			found = true;
-			break;
-		    }
-		}
-		if (! found) {
-		    outputs.push_back(r);
-		    output += r;
-		}
-	    }
-	    */
+            } else {
+                // Somewhat silly duplicate detection heuristic ...
+                bool found = false;
+                for (int i = 0; i < outputs.size(); i++) {
+                    if (outputs[i] == r) {
+                        BOOST_LOG_TRIVIAL(debug) << "Ignoring " << r << " results";
+                        // Assume it is the same answer ...
+                        found = true;
+                        break;
+                    }
+                }
+                if (! found) {
+                    outputs.push_back(r);
+                    output += r;
+                }
+            }
+            */
 	}
     }
     return output;
 }
+
+void QSQR::estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Rule> &execRules) {
+
+    BOOST_LOG_TRIVIAL(debug) << "Literal " << l.tostring(program, &layer) << ", depth = " << depth;
+
+    if (depth > 4) {
+	metrics.estimate++;
+	metrics.cost++;
+        return;
+    }
+ 
+    Predicate pred = l.getPredicate();
+    metrics.countIntermediateQueries++;
+
+    if (pred.getType() == EDB) {
+	size_t result = layer.estimateCardinality(l);
+	BOOST_LOG_TRIVIAL(debug) << "EDB: estimate = " << result;
+	metrics.estimate += result;
+	metrics.cost += result;
+    }
+
+    std::vector<Rule> *r = program->getAllRulesByPredicate(pred.getId());
+    for (std::vector<Rule>::iterator itr =
+	    r->begin(); itr != r->end(); ++itr) {
+	Literal head = itr->getHead();
+	Substitution substitutions[SIZETUPLE];
+	int nsubs = Literal::subsumes(substitutions, head, l);
+	if (nsubs < 0) {
+	    continue;
+	}
+	BOOST_LOG_TRIVIAL(debug) << "Matches with rule " << itr->tostring(program, &layer);
+
+	Metrics m;
+	memset(&m, 0, sizeof(Metrics));
+        estimateRule(m, depth + 1, *itr, substitutions, nsubs, execRules);
+	metrics.estimate += m.estimate;
+	metrics.countRules += m.countRules;
+	metrics.countIntermediateQueries += m.countIntermediateQueries;
+	metrics.cost += m.cost;
+    }
+}
+
+void QSQR::estimateRule(Metrics &metrics, int depth, Rule &rule, Substitution *subs, int nsubs, std::vector<Rule> &execRules) {
+    bool exists = false;
+    for (std::vector<Rule>::iterator itr = execRules.begin(); itr != execRules.end() && ! exists; itr++) {
+	exists = itr->getHead() == rule.getHead() && itr->getBody() == rule.getBody();
+    }
+    if (!exists) {
+	execRules.push_back(rule);
+    }
+    metrics.countRules++;
+    std::vector<Literal> body = rule.getBody();
+    for (std::vector<Literal>::const_iterator itr = body.begin(); itr != body.end(); ++itr) {
+	Metrics m;
+	memset(&m, 0, sizeof(Metrics));
+	Literal substituted = itr->substitutes(subs, nsubs);
+	BOOST_LOG_TRIVIAL(debug) << "Substituted literal = " << substituted.tostring(program, &layer);
+	estimateQuery(m, depth, substituted, execRules);
+	metrics.countRules += m.countRules;
+	metrics.countIntermediateQueries += m.countIntermediateQueries;
+	metrics.cost += m.estimate * m.cost;
+	if (m.estimate == 0) {
+	    metrics.estimate = 1;
+	    break;
+	}
+	metrics.estimate += m.estimate;
+    }
+}
+
 
 void QSQR::evaluate(Predicate &pred, BindingsTable *inputTable,
                     size_t offsetInput, bool repeat) {

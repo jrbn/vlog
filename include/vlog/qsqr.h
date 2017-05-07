@@ -6,6 +6,7 @@
 #include <vlog/qsqquery.h>
 #include <vlog/concepts.h>
 #include <vlog/bindingstable.h>
+#include <vlog/reasoner.h>
 //#include <vlog/ruleexecutor.h>
 #include <vlog/edb.h>
 
@@ -113,6 +114,10 @@ public:
     BindingsTable *getAnswerTable(const Literal *literal) {
         return getAnswerTable(literal->getPredicate(), literal->getPredicate().getAdorment());
     }
+
+    void estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Rule> &execRules);
+
+    void estimateRule(Metrics &metrics, int depth, Rule &rule, Substitution *subs, int nsubs, std::vector<Rule> &execRules);
 
     size_t estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries,std::vector<Rule> &execRules);
 
