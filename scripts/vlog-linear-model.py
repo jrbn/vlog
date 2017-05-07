@@ -40,14 +40,14 @@ flags.DEFINE_string(
     "",
     "Path to the test data.")
 
-COLUMNS = ["subjectBound", "objectBound", "isClass", "numberOfRows", "algorithm"]
+COLUMNS = ["subjectBound", "objectBound", "numberOfResults", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "numberOfRows", "algorithm"]
 LABEL_COLUMN = "label"
 
 # Categorical columns are the ones that have values from the finite set.
-CATEGORICAL_COLUMNS = ["subjectBound", "objectBound", "isClass", "algorithm"]
+CATEGORICAL_COLUMNS = ["subjectBound", "objectBound", "algorithm"]
 
 # Continuous columns are the ones that have any numerical value in continuous range
-CONTINUOUS_COLUMNS = ["numberOfRows"]
+CONTINUOUS_COLUMNS = ["numberOfResults", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "numberOfRows"]
 
 def build_estimator(model_dir):
   """Build an estimator."""
@@ -56,14 +56,18 @@ def build_estimator(model_dir):
                                                      keys=["0", "1"])
   objectBound = tf.contrib.layers.sparse_column_with_keys(column_name="objectBound",
                                                      keys=["0", "1"])
-  isClass = tf.contrib.layers.sparse_column_with_keys(column_name="isClass",
-                                                     keys=["0", "1"])
+  #isClass = tf.contrib.layers.sparse_column_with_keys(column_name="isClass",
+  #                                                   keys=["0", "1"])
 
   # Continuous base columns.
   numberOfRows = tf.contrib.layers.real_valued_column("numberOfRows")
+  numberOfResults = tf.contrib.layers.real_valued_column("numberOfResults")
+  numberOfRules = tf.contrib.layers.real_valued_column("numberOfRules")
+  numberOfQueries = tf.contrib.layers.real_valued_column("numberOfQueries")
+  numberOfUniqueRules = tf.contrib.layers.real_valued_column("numberOfUniqueRules")
 
   # Wide columns and deep columns.
-  wide_columns = [subjectBound, objectBound, isClass, numberOfRows]
+  wide_columns = [subjectBound, objectBound, numberOfResults, numberOfRules, numberOfQueries, numberOfUniqueRules, numberOfRows]
 
   if FLAGS.model_type == "wide":
     m = tf.contrib.learn.LinearClassifier(model_dir=model_dir,
