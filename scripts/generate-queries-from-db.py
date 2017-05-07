@@ -17,12 +17,10 @@ def parse_args():
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 30)
     parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 20)
-    parser.add_argument('--out', type=str, help = 'Name of the query output file')
+    parser.add_argument('--out', type=str, required=True, help = 'Name of the query output file')
 
     return parser.parse_args()
 
-
-outFile = ""
 
 def generateQueries(rule, arity, resultRecords):
 
@@ -145,6 +143,7 @@ def generateQueries(rule, arity, resultRecords):
             allFeatures.append(winnerAlgorithm)
 
             record = ""
+            # TODO: check if number of features is 7/8
             for i, a in enumerate(allFeatures):
                 record += str(a)
                 if (i != len(allFeatures)-1):
@@ -256,6 +255,8 @@ ARG_TIMEOUT = args.timeout
 ARG_NQ = args.nq
 rulesFile = args.rules
 outFile = args.out
+with open(outFile + ".csv", 'w') as fout:
+    fout.write("")
 
 parseRulesFile(rulesFile)
 
