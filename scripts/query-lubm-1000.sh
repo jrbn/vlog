@@ -1,1 +1,1 @@
-python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/LUBM_LE.dlog --mat /var/scratch/uji300/vlog/materialization_lubm1_1000 --conf edb-lubm.conf --out lubm-1000-queries.out
+python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/LUBM_LE.dlog --mat /var/scratch/uji300/vlog/materialization_lubm1_1000 --conf edb-lubm.conf --out lubm-1000-queries.dat 2> lubm-genq-mat-errs.out

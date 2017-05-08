@@ -1,1 +1,1 @@
-python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/DBpedia_L.dlog --mat /var/scratch/uji300/vlog/materialization_dbpedia --conf edb-dbpedia.conf --out dbpedia-queries.out
+python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/DBpedia_L.dlog --mat /var/scratch/uji300/vlog/materialization_dbpedia --conf edb-dbpedia.conf --out dbpedia-queries.out 2> dbpedia-genq-mat-err.out
