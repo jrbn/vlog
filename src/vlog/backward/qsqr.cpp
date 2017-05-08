@@ -197,15 +197,26 @@ void QSQR::estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Ru
 	    r->begin(); itr != r->end(); ++itr) {
 	Literal head = itr->getHead();
 	Substitution substitutions[SIZETUPLE];
-	int nsubs = Literal::subsumes(substitutions, head, l);
-	if (nsubs < 0) {
+	int nSubs = Literal::subsumes(substitutions, head, l);
+	if (nSubs < 0) {
 	    continue;
 	}
-	BOOST_LOG_TRIVIAL(debug) << "Matches with rule " << itr->tostring(program, &layer);
 
 	Metrics m;
 	memset(&m, 0, sizeof(Metrics));
-        estimateRule(m, depth + 1, *itr, substitutions, nsubs, execRules);
+
+	BOOST_LOG_TRIVIAL(debug) << "Matches with rule " << itr->tostring(program, &layer);
+
+	// Remove replacements of variables with variables ...
+	int filterednSubs = 0;
+	Substitution filteredSubstitutions[SIZETUPLE];
+	for (int i = 0; i < nSubs; i++) {
+	    if (! substitutions[i].destination.isVariable()) {
+		 filteredSubstitutions[filterednSubs++] = substitutions[i];
+	    }
+	}
+
+        estimateRule(m, depth + 1, *itr, filteredSubstitutions, filterednSubs, execRules);
 	metrics.estimate += m.estimate;
 	metrics.countRules += m.countRules;
 	metrics.countIntermediateQueries += m.countIntermediateQueries;
@@ -213,7 +224,7 @@ void QSQR::estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Ru
     }
 }
 
-void QSQR::estimateRule(Metrics &metrics, int depth, Rule &rule, Substitution *subs, int nsubs, std::vector<Rule> &execRules) {
+void QSQR::estimateRule(Metrics &metrics, int depth, Rule &rule, Substitution *subs, int nSubs, std::vector<Rule> &execRules) {
     bool exists = false;
     for (std::vector<Rule>::iterator itr = execRules.begin(); itr != execRules.end() && ! exists; itr++) {
 	exists = itr->getHead() == rule.getHead() && itr->getBody() == rule.getBody();
@@ -226,14 +237,18 @@ void QSQR::estimateRule(Metrics &metrics, int depth, Rule &rule, Substitution *s
     for (std::vector<Literal>::const_iterator itr = body.begin(); itr != body.end(); ++itr) {
 	Metrics m;
 	memset(&m, 0, sizeof(Metrics));
-	Literal substituted = itr->substitutes(subs, nsubs);
+	Literal substituted = itr->substitutes(subs, nSubs);
 	BOOST_LOG_TRIVIAL(debug) << "Substituted literal = " << substituted.tostring(program, &layer);
 	estimateQuery(m, depth, substituted, execRules);
 	metrics.countRules += m.countRules;
 	metrics.countIntermediateQueries += m.countIntermediateQueries;
 	metrics.cost += m.estimate * m.cost;
+	// We could do a bit more effort here?
+	// - check for filtering joins. If so, no contribution to estimate?
+	// - check if the literal has variables in common with the LHS. If not, no contribution to estimate?
 	if (m.estimate == 0) {
-	    metrics.estimate = 1;
+	    // Should only be the case when we are sure...
+	    metrics.estimate = 0;
 	    break;
 	}
 	metrics.estimate += m.estimate;
