@@ -40,14 +40,14 @@ flags.DEFINE_string(
     "",
     "Path to the test data.")
 
-COLUMNS = ["subjectBound", "objectBound", "numberOfResults", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "numberOfRows", "algorithm"]
+COLUMNS = ["subjectBound", "objectBound", "numberOfRows", "numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
 LABEL_COLUMN = "label"
 
 # Categorical columns are the ones that have values from the finite set.
 CATEGORICAL_COLUMNS = ["subjectBound", "objectBound", "algorithm"]
 
 # Continuous columns are the ones that have any numerical value in continuous range
-CONTINUOUS_COLUMNS = ["numberOfResults", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "numberOfRows"]
+CONTINUOUS_COLUMNS = ["numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "numberOfRows"]
 
 def build_estimator(model_dir):
   """Build an estimator."""
@@ -65,9 +65,10 @@ def build_estimator(model_dir):
   numberOfRules = tf.contrib.layers.real_valued_column("numberOfRules")
   numberOfQueries = tf.contrib.layers.real_valued_column("numberOfQueries")
   numberOfUniqueRules = tf.contrib.layers.real_valued_column("numberOfUniqueRules")
+  costOfComputing = tf.contrib.layers.real_valued_column("costOfComputing")
 
   # Wide columns and deep columns.
-  wide_columns = [subjectBound, objectBound, numberOfResults, numberOfRules, numberOfQueries, numberOfUniqueRules, numberOfRows]
+  wide_columns = [subjectBound, objectBound, numberOfResults, costOfComputing, numberOfQueries, numberOfRules, numberOfUniqueRules, numberOfRows]
 
   if FLAGS.model_type == "wide":
     m = tf.contrib.learn.LinearClassifier(model_dir=model_dir,
@@ -151,6 +152,10 @@ def train_and_eval():
   for key in sorted(results):
     print("%s: %s" % (key, results[key]))
 
+  new_samples = np.array(
+      [[6, 3, 4, 1, 8, 1, 5, 7]], dtype=int)
+  y = m.predict(new_samples)
+  print ("Predictions : ", str(y))
 
 def main(_):
   train_and_eval()
