@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import time
 import argparse
 from collections import defaultdict
 from random import shuffle
@@ -13,14 +14,12 @@ STR_vector = "Vector:"
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
     parser.add_argument('--rules' , type=str, required=True, help = 'Path to the rules file')
-    parser.add_argument('--db', type=str, help = 'Path to the directory where results of rules/predicate are stored')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
-    parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 30)
-    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 20)
+    parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 10)
+    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 10)
     parser.add_argument('--out', type=str, required=True, help = 'Name of the query output file')
 
     return parser.parse_args()
-
 
 def generateQueries(rule, arity, resultRecords):
 
@@ -90,21 +89,6 @@ def generateQueries(rule, arity, resultRecords):
         if iterations == ARG_NQ:
             break
 
-        #timeoutQSQR = False
-        #try:
-        #    outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
-        #except TimeoutExpired:
-        #    outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-        #    timeoutQSQR = True
-
-        #strQSQR = str(outQSQR)
-        #index = strQSQR.find("Runtime =")
-        #timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds", index)-1]
-
-        ##TODO: Find # rows in the output and get the number of records in the result.
-        #index = strQSQR.find("#rows =")
-        #numResultsQSQR = strQSQR[index+8:strQSQR.find("\\n", index)]
-
         timeout = False
         try:
             output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'both', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT*2)
@@ -112,11 +96,14 @@ def generateQueries(rule, arity, resultRecords):
             output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
             timeout = True
         except CalledProcessError:
-            print("Exception raised because of the following query:")
-            print(q)
+            sys.stderr.write("Exception raised because of the following query:")
+            sys.stderr.write(q)
             timeout = True
 
         if timeout == False:
+
+            numQueryFeatures += 1
+
             output = str(output)
             index = output.find(STR_magic_time)
             timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
@@ -143,13 +130,14 @@ def generateQueries(rule, arity, resultRecords):
             allFeatures.append(winnerAlgorithm)
 
             record = ""
-            # TODO: check if number of features is 7/8
+            # TODO: check if number of features is 9
+            if len(allFeatures) > 5 + len(features[q]) + 2:
+                sys.stderr.write(q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
             for i, a in enumerate(allFeatures):
                 record += str(a)
                 if (i != len(allFeatures)-1):
                     record += ","
             record += "\n"
-            print (q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
             data += record
 
     with open(outFile + ".csv", 'a') as fout:
@@ -244,7 +232,12 @@ def parseRulesFile(rulesFile):
                 else:
                     resultRecords = records[3:len(records)-5]
                     print ("generating queries for ", rule)
-                    generateQueries(rule, arityMap[rule], resultRecords)
+
+                    # resultRecord contains all tuples from database that matched
+                    # Pass only 10 pairs to generate query
+                    maxRecords = min(10, len(resultRecords)
+                    sampleRecords = resultRecords[:maxRecords]
+                    generateQueries(rule, arityMap[rule], sampleRecords)
                     break
             else:
                 atomIndex += 1
@@ -255,8 +248,11 @@ ARG_TIMEOUT = args.timeout
 ARG_NQ = args.nq
 rulesFile = args.rules
 outFile = args.out
+numQueryFeatures = 0
 with open(outFile + ".csv", 'w') as fout:
     fout.write("")
-
+start = time.time()
 parseRulesFile(rulesFile)
+end = time.time()
+print (numQueryFeatures, " queries generated in ", (end-start)/60 , " minutes")
 

@@ -82,54 +82,79 @@ Query type is the key and list of queries of that type is the value.
 '''
 def runQueries(queries, features):
     data = ""
+    features = ""
     for queryType in queries.keys():
         shuffle(queries[queryType])
+        cntQSQRWon = 0
+        cntMagicWon = 0
         iterations = 0
         for q in queries[queryType]:
             # Here invoke vlog and execute query and get the runtime
-            timeoutQSQR = False
+            timeout = False
             try:
-                outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
+                output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'both', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT*2)
             except TimeoutExpired:
-                outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-                timeoutQSQR = True
+                output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
+                timeout = True
+            except CalledProcessError:
+                sys.stderr.write("Exception raised because of the following query:")
+                sys.stderr.write(q)
+                timeout = True
 
-            strQSQR = str(outQSQR)
-            index = strQSQR.find("Runtime =")
-            timeQSQR = strQSQR[index+10:strQSQR.find("milliseconds", index)-1]
+            if timeout == False:
+                output = str(output)
+                index = output.find(STR_magic_time)
+                timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
 
-            #TODO: Find # rows in the output and get the number of records in the result.
-            index = strQSQR.find("#rows =")
-            numResultsQSQR = strQSQR[index+8:strQSQR.find("\\n", index)]
+                index = output.find(STR_qsqr_time)
+                timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
 
-            timeoutMagic = False
-            try:
-                outMagic = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'magic', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT)
-            except TimeoutExpired:
-                outMagic = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-                timeoutMagic = True
+                index = output.find(STR_rows)
+                numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
 
-            strMagic = str(outMagic)
-            index = strMagic.find("Runtime =")
-            timeMagic = strMagic[index+10:strMagic.find("milliseconds", index)-1]
+                index = output.find(STR_vector)
+                vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
+                vector = vector_str.split(',')
 
-            index = strMagic.find("#rows =")
-            numResultsMagic = strMagic[index+8:strMagic.find("\\n",index)]
+                if float(timeQsqr) < float(timeMagic):
+                    winnerAlgorithm = "QSQR"
+                else:
+                    winnerAlgorithm = "MagicSets"
 
-            if not timeoutQSQR and not timeoutMagic:
-                if (numResultsQSQR != numResultsMagic):
-                    print (numResultsMagic , " : " , numResultsQSQR, "-")
+                allFeatures = features[q]
+                for v in vector:
+                    allFeatures.append(v)
+                allFeatures.append(numResults)
+                allFeatures.append(winnerAlgorithm)
 
-            features[q].append(int(numResultsQSQR))
+                features[q].append(int(numResultsQSQR))
 
-            record = str(q) + " " + str(queryType) + " " + str(timeQSQR) + " " + str(timeMagic) + " " + str(features[q])
+                if float(timeQSQR) > float(timeMagic):
+                    cntQSQRWon += 1
+                else:
+                    cntMagicWon += 1
 
-            print (record)
-            data += record + "\n"
+                record = str(q) + " " + str(queryType) + " " + str(timeQSQR) + " " + str(timeMagic) + " " + str(allFeatures[q])
+                print (record)
 
-            iterations += 1
-            if iterations == ARG_NQ:
-                break
+                featureRecord = ""
+                # TODO: check if number of features is 9
+                if len(allFeatures) > 5 + len(features[q]) + 2:
+                    sys.stderr.write(q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
+                for i, a in enumerate(allFeatures):
+                    featureRecord += str(a)
+                    if (i != len(allFeatures)-1):
+                        featureRecord += ","
+                featureRecord += "\n"
+                features += featureRecord
+
+                iterations += 1
+                if iterations == ARG_NQ:
+                    break
+        # Here we are out of outer loop (of query types)
+        # We have counts of qsqr and magic sets
+        data += str(queryType) + " " + str(cntQSQRWon) + " " + str(cntMagicWon) + "\n"
+
 
     with open(outFile, 'a') as fout:
         fout.write(data)
@@ -220,7 +245,7 @@ rulesFile = args.rules
 outFile = args.out
 
 with open(outFile, 'w') as fout:
-    fout.write("Query Type QSQR MagicSets\n")
+    fout.write("QueryType QSQR MagicSets\n")
 
 rulesWithResult = dict()
 matDir = args.mat
