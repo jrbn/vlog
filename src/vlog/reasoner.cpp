@@ -211,7 +211,7 @@ return output;
 
 size_t Reasoner::estimate(Literal &query, std::vector<uint8_t> *posBindings,
                           std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                          Program &program, int *countRules, int *countIntQueries, int *countUniqRules) {
+                          Program &program, int *countRules, int *countIntQueries, int *countUniqRules, int maxDepth) {
 
     QSQQuery rootQuery(query);
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
@@ -309,7 +309,7 @@ TupleIterator *Reasoner::getIterator(Literal &query,
                 returnOnlyVars, sortByFields);
     }
     if (posJoins == NULL || posJoins->size() < query.getNVars() || returnOnlyVars || posJoins->size() > 1) {
-        ReasoningMode mode = chooseMostEfficientAlgo(query, edb, program, posJoins, possibleValuesJoins);
+        ReasoningMode mode = chooseMostEfficientAlgo(query, edb, program, posJoins, possibleValuesJoins, 4);
         if (mode == MAGIC) {
             BOOST_LOG_TRIVIAL(info) << "Using magic for " << query.tostring(&program, &edb);
             return Reasoner::getMagicIterator(
@@ -472,7 +472,7 @@ TupleIterator *Reasoner::getIncrReasoningIterator(Literal &query,
             // Decide between magic or QSQ-R, to verify the remaining values.
             int algo = chooseMostEfficientAlgo(query, edb, program,
                     posJoins,
-                    possibleValuesJoins);
+                    possibleValuesJoins, 4);
 
             TupleIterator *itr = NULL;
 
@@ -774,19 +774,20 @@ TupleIterator *Reasoner::getMaterializationIterator(Literal &query,
 }
 
 void Reasoner::getMetrics(Literal &query, std::vector<uint8_t> *posBindings, std::vector<Term_t> *valueBindings,
-	    EDBLayer &layer, Program &program, Metrics &metrics) {
+	    EDBLayer &layer, Program &program, Metrics &metrics, int maxDepth) {
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
             new QSQR(layer, &program));
     memset(&metrics, 0, sizeof(Metrics));
     std::vector<Rule> uniqueRules;
-    evaluator->estimateQuery(metrics, 0, query, uniqueRules);
+    evaluator->estimateQuery(metrics, maxDepth, query, uniqueRules);
     metrics.countUniqueRules = uniqueRules.size();
 }
 
 ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
         EDBLayer &layer, Program &program,
         std::vector<uint8_t> *posBindings,
-        std::vector<Term_t> *valueBindings) {
+        std::vector<Term_t> *valueBindings,
+	int maxDepth) {
     uint64_t cost = 0;
     if (posBindings != NULL) {
         //Create a new query with the values substituted
@@ -800,7 +801,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
         // Fixed adornments in predicate of literal below.
         Predicate pred1(query.getPredicate(), Predicate::calculateAdornment(newTuple));
         Literal newLiteral(pred1, newTuple);
-        size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program, NULL, NULL, NULL);
+        size_t singleCost = estimate(newLiteral, NULL, NULL, layer, program, NULL, NULL, NULL, maxDepth);
         BOOST_LOG_TRIVIAL(debug) << "SingleCost is " <<
             singleCost << " nBindings " << (valueBindings->size() / posBindings->size());
 
@@ -813,7 +814,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
                 limitedValueBindings.push_back(valueBindings->at(i));
             }
             uint64_t tenCost = estimate(query, posBindings,
-                                        &limitedValueBindings, layer, program, NULL, NULL, NULL);
+                                        &limitedValueBindings, layer, program, NULL, NULL, NULL, maxDepth);
             BOOST_LOG_TRIVIAL(debug) << "TenCost is " << tenCost;
 
             //y = mx + b. m is slope, b is constant.
@@ -826,7 +827,7 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
         }
     } else {
 	Metrics metrics;
-	getMetrics(query, NULL, NULL, layer, program, metrics);
+	getMetrics(query, NULL, NULL, layer, program, metrics, maxDepth);
 	BOOST_LOG_TRIVIAL(info) << "Vector: est " << metrics.estimate << ", countRules " << metrics.countRules << ", countIntQueries " << metrics.countIntermediateQueries << ", countUniqRules " << metrics.countUniqueRules << ", decision " << (cost < threshold ? "qsqr" : "magic");
     }
     ReasoningMode mode = cost < threshold ? TOPDOWN : MAGIC;

@@ -56,19 +56,20 @@ public:
 
     size_t estimate(Literal &query, std::vector<uint8_t> *posBindings,
                     std::vector<Term_t> *valueBindings, EDBLayer &layer,
-                    Program &program, int *countRules, int *countIntQueries, int *countUniqRules);
+                    Program &program, int *countRules, int *countIntQueries, int *countUniqRules, int maxDepth);
 
     void getMetrics(Literal &query,
 	            std::vector<uint8_t> *posBindings,
 		    std::vector<Term_t> *valueBindings,
 		    EDBLayer &layer,
 		    Program &program,
-		    Metrics &metrics);
+		    Metrics &metrics,
+		    int maxDepth);
 
     ReasoningMode chooseMostEfficientAlgo(Literal &query,
                                           EDBLayer &layer, Program &program,
                                           std::vector<uint8_t> *posBindings,
-                                          std::vector<Term_t> *valueBindings);
+                                          std::vector<Term_t> *valueBindings, int maxDepth);
 
 
     TupleIterator *getIterator(Literal &query,
