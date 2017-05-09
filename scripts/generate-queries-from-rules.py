@@ -23,6 +23,7 @@ def parse_args():
 
 def generateQueries(rule, arity, resultRecords):
 
+    global numQueryFeatures
     queries = set()
     features = {}
     # Generic query that results in all the possible records
@@ -41,6 +42,9 @@ def generateQueries(rule, arity, resultRecords):
     if arity > 1:
         for record in resultRecords:
             columns = record.split()
+            if len(columns) > arity:
+                continue
+
             for a in range(arity):
                 query = rule + "("
                 for j, column in enumerate(columns):
@@ -64,7 +68,6 @@ def generateQueries(rule, arity, resultRecords):
     for record in resultRecords:
         columns = record.split()
 
-        # TODO: may not be applicable for certain rules
         # e.g. RP40(A,B) => RP50(X), RP51(X,Y)
         # Then, results of RP50 will give only one column for booleam queries
         if (len(columns) != arity):
@@ -97,7 +100,7 @@ def generateQueries(rule, arity, resultRecords):
             timeout = True
         except CalledProcessError:
             sys.stderr.write("Exception raised because of the following query:")
-            sys.stderr.write(q)
+            sys.stderr.write(q, "\n")
             timeout = True
 
         if timeout == False:
@@ -130,7 +133,6 @@ def generateQueries(rule, arity, resultRecords):
             allFeatures.append(winnerAlgorithm)
 
             record = ""
-            # TODO: check if number of features is 9
             if len(allFeatures) > 5 + len(features[q]) + 2:
                 sys.stderr.write(q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
             for i, a in enumerate(allFeatures):
@@ -176,9 +178,11 @@ def parseRulesFile(rulesFile):
             body = line.split(':-')[1]
             rule = head.split('(')[0]
 
-            # TODO: compute arity here, so that we can pass it to generate query function
             arity = len(head.split(','))
             arityMap[rule] = arity
+            if (arity > 2):
+                sys.stderr.write("head : ", head, "\n")
+
             body = body.strip()
             atoms = get_atoms(body)
             if rule in rulesMap:
@@ -226,7 +230,6 @@ def parseRulesFile(rulesFile):
                     # apply recursive rule exploration strategy
                     print (rule , " predicate is not in the database")
                     print (atom, " did not produce any result records")
-                    #TODO: rulesMap for this rule should be false, so that other rules will not use this rule to get queries
                     atomIndex += 1
                     continue
                 else:
@@ -235,7 +238,7 @@ def parseRulesFile(rulesFile):
 
                     # resultRecord contains all tuples from database that matched
                     # Pass only 10 pairs to generate query
-                    maxRecords = min(10, len(resultRecords)
+                    maxRecords = min(10, len(resultRecords))
                     sampleRecords = resultRecords[:maxRecords]
                     generateQueries(rule, arityMap[rule], sampleRecords)
                     break

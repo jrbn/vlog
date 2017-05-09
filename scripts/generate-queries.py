@@ -7,8 +7,12 @@ from collections import defaultdict
 from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired
 
+STR_magic_time = "magic time ="
+STR_qsqr_time = "qsqr time ="
+STR_rows = "#rows ="
+STR_vector = "Vector:"
 
-def generateQueries(rule, arity, resultRecords, isClass):
+def generateQueries(rule, arity, resultRecords):
 
 
     # Generic query that results in all the possible records
@@ -20,22 +24,27 @@ def generateQueries(rule, arity, resultRecords, isClass):
             query += ","
     query += ")"
     queries[100+(len(resultRecords))] = [query]
-    features[query] = [0,0, isClass] # not subject bound, not object bound
+    features[query] = [0,0] # not subject bound, not object bound
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
     if arity > 1:
         for i, key in enumerate(sorted(resultRecords)):
             # i will be the type for us
-            for record in resultRecords[key]:
+
+            # TODO: reduce the size of resultRecords[key] table to generate queries faster.
+            maxRecords = min(20, len(resultRecords[key]))
+            sampleRecords = resultRecords[key][:maxRecords]
+
+            for record in sampleRecords:
                 for a in range(arity):
                     query = rule + "("
                     for j, column in enumerate(record):
                         if (a == j):
                             if j == 0:
-                                features_value = [0, 1, isClass] # Object bound (constant)
+                                features_value = [0, 1] # Object bound (constant)
                             else:
-                                features_value = [1, 0, isClass]
+                                features_value = [1, 0]
                             query += chr(j+65)
                         else:
                             query += column
@@ -69,7 +78,7 @@ def generateQueries(rule, arity, resultRecords, isClass):
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
-                features[query] = [1, 1, isClass]
+                features[query] = [1, 1]
                 if (1000+i+1 in queries):
                     queries[1000+i+1].append(query)
                 else:
@@ -82,7 +91,7 @@ Query type is the key and list of queries of that type is the value.
 '''
 def runQueries(queries, features):
     data = ""
-    features = ""
+    featureString = ""
     for queryType in queries.keys():
         shuffle(queries[queryType])
         cntQSQRWon = 0
@@ -121,32 +130,31 @@ def runQueries(queries, features):
                 else:
                     winnerAlgorithm = "MagicSets"
 
+                features[q].append(int(numResults))
+
                 allFeatures = features[q]
                 for v in vector:
                     allFeatures.append(v)
-                allFeatures.append(numResults)
                 allFeatures.append(winnerAlgorithm)
 
-                features[q].append(int(numResultsQSQR))
 
-                if float(timeQSQR) > float(timeMagic):
+                if float(timeQsqr) > float(timeMagic):
                     cntQSQRWon += 1
                 else:
                     cntMagicWon += 1
 
-                record = str(q) + " " + str(queryType) + " " + str(timeQSQR) + " " + str(timeMagic) + " " + str(allFeatures[q])
+                record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
                 print (record)
 
                 featureRecord = ""
-                # TODO: check if number of features is 9
-                if len(allFeatures) > 5 + len(features[q]) + 2:
+                if len(allFeatures) > 9:
                     sys.stderr.write(q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
                 for i, a in enumerate(allFeatures):
                     featureRecord += str(a)
                     if (i != len(allFeatures)-1):
                         featureRecord += ","
                 featureRecord += "\n"
-                features += featureRecord
+                featureString += featureRecord
 
                 iterations += 1
                 if iterations == ARG_NQ:
@@ -158,6 +166,8 @@ def runQueries(queries, features):
 
     with open(outFile, 'a') as fout:
         fout.write(data)
+    with open(outFile + '.features', 'a') as fout:
+        fout.write(featureString)
 
 def blocks(fileObject, size=65536):
     while True:
@@ -174,7 +184,7 @@ def isFileTooBig(fileName):
         return True
     return False
 
-def parseResultFile(name, resultFile, isClass):
+def parseResultFile(name, resultFile):
     print (name)
     results = defaultdict(list)
     arity = 0
@@ -195,7 +205,7 @@ def parseResultFile(name, resultFile, isClass):
 
         results[int(columns[0])].append(operands)
 
-    generateQueries(name, arity, results, isClass)
+    generateQueries(name, arity, results)
     #print (len(results))
 
 '''
@@ -208,19 +218,15 @@ def parseRulesFile(rulesFile, rulesWithResult):
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
-            isClass = False
             head = line.split(':')[0]
             body = line.split('-')[1]
             rule = head.split('(')[0]
             if rule in exploredRules:
                 continue
             exploredRules.add(rule)
-            if "rdf:type" in line:
-                # This predicate is a class
-                isClass = True
             if rule in rulesWithResult:
                 print (head, "=>", body)
-                parseResultFile(rule, rulesWithResult[rule], isClass)
+                parseResultFile(rule, rulesWithResult[rule])
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
@@ -246,6 +252,9 @@ outFile = args.out
 
 with open(outFile, 'w') as fout:
     fout.write("QueryType QSQR MagicSets\n")
+
+with open(outFile + '.features', 'w') as fout:
+    fout.write("")
 
 rulesWithResult = dict()
 matDir = args.mat
