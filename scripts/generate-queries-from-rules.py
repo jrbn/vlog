@@ -100,7 +100,8 @@ def generateQueries(rule, arity, resultRecords):
             timeout = True
         except CalledProcessError:
             sys.stderr.write("Exception raised because of the following query:")
-            sys.stderr.write(q, "\n")
+            sys.stderr.write(q)
+            sys.stderr.write("\n")
             timeout = True
 
         if timeout == False:

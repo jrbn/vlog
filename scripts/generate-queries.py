@@ -138,7 +138,7 @@ def runQueries(queries, features):
                 allFeatures.append(winnerAlgorithm)
 
 
-                if float(timeQsqr) > float(timeMagic):
+                if float(timeQsqr) < float(timeMagic):
                     cntQSQRWon += 1
                 else:
                     cntMagicWon += 1
