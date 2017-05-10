@@ -227,6 +227,10 @@ bool initParams(int argc, const char** argv, po::variables_map &vm) {
             "Determines the reasoning algo (only for <queryLiteral>). Possible values are \"qsqr\", \"magic\", \"auto\".");
     query_options.add_options()("timeoutLiteral", po::value<int>()->default_value(0),
             "Timeout in seconds for <queryLiteral>.");
+    query_options.add_options()("printValues", po::value<bool>()->default_value(true),
+            "Print result triples of queries.");
+    query_options.add_options()("estimationDepth", po::value<int>()->default_value(5),
+            "Depth for cost estimation");
     query_options.add_options()("selectionStrategy", po::value<string>()->default_value(""),
             "Determines the selection strategy (only for <queryLiteral>, when \"auto\" is specified for the reasoningAlgorithm). Possible values are \"cardEst\", ... (to be extended) .");
     query_options.add_options()("matThreshold", po::value<long>()->default_value(10000000),
@@ -485,6 +489,7 @@ void execSPARQLQuery(EDBLayer &edb, po::variables_map &vm) {
     //Parse the rules and create a program
     Program p(edb.getNTerms(), &edb);
     string pathRules = vm["rules"].as<string>();
+    bool printResults = vm["printValues"].as<bool>();
     if (pathRules != "") {
         p.readFromFile(pathRules);
         p.sortRulesByIDBPredicates();
@@ -546,7 +551,7 @@ void execSPARQLQuery(EDBLayer &edb, po::variables_map &vm) {
     strStream << inFile.rdbuf();//read the file
 
     WebInterface::execSPARQLQuery(strStream.str(), vm["explain"].as<bool>(),
-            edb.getNTerms(), *db, true, false, NULL, NULL,
+            edb.getNTerms(), *db, printResults, false, NULL, NULL,
             NULL);
     delete db;
 
@@ -645,14 +650,16 @@ cout.rdbuf(strm_buffer);
 
 void alarmHandler(int signal) {
     BOOST_LOG_TRIVIAL(info) << "Got alarm signal";
-    throw 200;
+    // Throw something that is otherwise unused.
+    throw true;
 }
 
 string selectStrategy(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reasoner, po::variables_map &vm) {
     string strategy = vm["selectionStrategy"].as<string>();
+    int maxDepth = vm["estimationDepth"].as<int>();
     if (strategy == "" || strategy == "cardEst") {
 	// Use the original cardinality estimation strategy
-	ReasoningMode mode = reasoner.chooseMostEfficientAlgo(literal, edb, p, NULL, NULL);
+	ReasoningMode mode = reasoner.chooseMostEfficientAlgo(literal, edb, p, NULL, NULL, maxDepth);
 	return mode == TOPDOWN ? "qsqr" : "magic";
     }
     // Add strategies here ...
@@ -662,6 +669,7 @@ string selectStrategy(EDBLayer &edb, Program &p, Literal &literal, Reasoner &rea
 
 double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasoner &reasoner, po::variables_map &vm) {
 
+    bool printResults = vm["printValues"].as<bool>();
     int nVars = literal.getNVars();
     bool onlyVars = nVars > 0;
 
@@ -704,20 +712,22 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 	    while (iter->hasNext()) {
 		iter->next();
 		count++;
-		for (int i = 0; i < sz; i++) {
-		    char supportText[MAX_TERM_SIZE];
-		    uint64_t value = iter->getElementAt(i);
-		    if (i != 0) {
-			cout << " ";
+		if (printResults) {
+		    for (int i = 0; i < sz; i++) {
+			char supportText[MAX_TERM_SIZE];
+			uint64_t value = iter->getElementAt(i);
+			if (i != 0) {
+			    cout << " ";
+			}
+			if (!edb.getDictText(value, supportText)) {
+			    cerr << "Term " << value << " not found" << endl;
+			    cout << value;
+			} else {
+			    cout << supportText;
+			}
 		    }
-		    if (!edb.getDictText(value, supportText)) {
-			cerr << "Term " << value << " not found" << endl;
-			cout << value;
-		    } else {
-			cout << supportText;
-		    }
+		    cout << endl;
 		}
-		cout << endl;
 	    }
 	}
 	boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
@@ -728,33 +738,15 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 
 	if (times > 0) {
 	    // Redirect output
-	    ofstream file("/dev/null");
-	    streambuf* strm_buffer = cout.rdbuf();
-	    cout.rdbuf(file.rdbuf());
 	    boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
 	    for (int j = 0; j < times; j++) {
 		TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
 		int sz = iter->getTupleSize();
 		while (iter->hasNext()) {
 		    iter->next();
-		    for (int i = 0; i < sz; i++) {
-			char supportText[MAX_TERM_SIZE];
-			uint64_t value = iter->getElementAt(i);
-			if (i != 0) {
-			    cout << ", ";
-			}
-			if (!edb.getDictText(value, supportText)) {
-			    cout << value;
-			} else {
-			    cout << supportText;
-			}
-		    }
 		}
-		cout << endl;
 	    }
 	    boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
-	    //Restore stdout
-	    cout.rdbuf(strm_buffer);
 
 	    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
 	    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
@@ -762,7 +754,7 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 	    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
 	}
 	return (durationQ1.count() * 1000);
-    } catch (int e) {
+    } catch (bool e) {
 	BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", got timeout";
 	// Reset signal mask so we can do it again ...
 	sigset_t x;
@@ -776,6 +768,7 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reasoner, po::variables_map &vm) {
 
     string algo = vm["reasoningAlgo"].as<string>();
+    int maxDepth = vm["estimationDepth"].as<int>();
 
     if (literal.getPredicate().getType() == EDB) {
 	if (algo != "edb") {
@@ -786,7 +779,7 @@ void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reas
 
     if (algo == "both" || algo == "onlyMetrics") {
 	Metrics m;
-	reasoner.getMetrics(literal, NULL, NULL, edb, p, m);
+	reasoner.getMetrics(literal, NULL, NULL, edb, p, m, maxDepth);
 	BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
 	if (algo == "both") {
 	    double t2 = runAlgo("magic", literal, edb, p, reasoner, vm);

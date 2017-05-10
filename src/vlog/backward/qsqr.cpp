@@ -134,7 +134,7 @@ void QSQR::createRules(Predicate &pred) {
 
 size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, size_t offsetInput*/, int &countRules, int &countIntQueries, std::vector<Rule> &execRules) {
 
-    if (depth > 4) {
+    if (depth <= 0) {
 	// Question is: what to return here. Assume no results? Assume 1 result?
 	return 1;
     }
@@ -144,7 +144,7 @@ size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, s
     size_t output = 0; 
     for (int i = 0; i < program->getAllRulesByPredicate(pred.getId())->size(); ++i) {
         RuleExecutor *exec = rules[pred.getId()][pred.getAdorment()][i];
-        size_t r = exec->estimate(depth + 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries,execRules);
+        size_t r = exec->estimate(depth - 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries,execRules);
 	//BOOST_LOG_TRIVIAL(info) << "Rule" << i << "\n" << "counter" << dCounter;
         if (r != 0) {
 	    // if (depth > 0 || r <= 10) {
@@ -176,7 +176,7 @@ void QSQR::estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Ru
 
     BOOST_LOG_TRIVIAL(debug) << "Literal " << l.tostring(program, &layer) << ", depth = " << depth;
 
-    if (depth > 4) {
+    if (depth <= 0) {
 	metrics.estimate++;
 	metrics.cost++;
         return;
@@ -216,7 +216,7 @@ void QSQR::estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Ru
 	    }
 	}
 
-        estimateRule(m, depth + 1, *itr, filteredSubstitutions, filterednSubs, execRules);
+        estimateRule(m, depth - 1, *itr, filteredSubstitutions, filterednSubs, execRules);
 	metrics.estimate += m.estimate;
 	metrics.countRules += m.countRules;
 	metrics.countIntermediateQueries += m.countIntermediateQueries;
@@ -230,6 +230,7 @@ void QSQR::estimateRule(Metrics &metrics, int depth, Rule &rule, Substitution *s
 	exists = itr->getHead() == rule.getHead() && itr->getBody() == rule.getBody();
     }
     if (!exists) {
+	BOOST_LOG_TRIVIAL(debug) << "Adding rule " << rule.tostring(program, &layer);
 	execRules.push_back(rule);
     }
     metrics.countRules++;
@@ -425,7 +426,7 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
 
                 } else {
 		    TupleTable *output = new TupleTable(1);
-                    uint64_t est = estimate(-1, pred2, inputTable/*, 0*/,countRules,countIntQueries,execRules);
+                    uint64_t est = estimate(4, pred2, inputTable/*, 0*/,countRules,countIntQueries,execRules);
 		    // Incorporate size of possible join values?
 		    // Useless, I think, because in the planning phase, we don't actually have more than
 		    // one possiblevaluesjoin. --Ceriel
@@ -461,7 +462,7 @@ TupleTable *QSQR::evaluateQuery(int evaluateOrEstimate, QSQQuery *query,
 		
                 } else { //ESTIMATE
                     TupleTable *output = new TupleTable(1);
-		    uint64_t est = estimate(-1, pred, inputTable/*, 0*/,countRules, countIntQueries,execRules);
+		    uint64_t est = estimate(4, pred, inputTable/*, 0*/,countRules, countIntQueries,execRules);
 		    BOOST_LOG_TRIVIAL(debug) << "No of Rules Executed(depth of 3) : " << countRules;
 		    BOOST_LOG_TRIVIAL(debug) << "No of Intermediate Queries" << countIntQueries;	
 		    BOOST_LOG_TRIVIAL(debug) << "No of Unique Rules" << execRules.size();
