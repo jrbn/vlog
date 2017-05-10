@@ -577,12 +577,20 @@ void SemiNaiver::processRuleFirstAtom(const uint8_t nBodyLiterals,
                     literalItr.getCurrentTable();
                 FCInternalTableItr *interitr = table->getIterator();
 
-                joinOutput->addColumns(0, interitr,
-                                       uniqueResults && endTable->isEmpty(),
-                                       uniqueResults && headLiteral.
-                                       sameVarSequenceAs(*bodyLiteral),
-                                       literalItr.getNTables() == 1);
-
+		if (headLiteral.getNVars() == 0) {
+		    if (endTable->isEmpty()) {
+			// Add a single row using the constants in the head literal.
+			for (int i = 0; i < headLiteral.getTupleSize(); i++) {
+			    joinOutput->processResultsAtPos(0, i, headLiteral.getTermAtPos(i).getValue(), true);
+			}
+		    }
+		} else {
+		    joinOutput->addColumns(0, interitr,
+					   uniqueResults && endTable->isEmpty(),
+					   uniqueResults && headLiteral.
+					   sameVarSequenceAs(*bodyLiteral),
+					   literalItr.getNTables() == 1);
+		}
                 table->releaseIterator(interitr);
             }
 
