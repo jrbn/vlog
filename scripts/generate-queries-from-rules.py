@@ -9,7 +9,7 @@ from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 
 STR_magic_time = "magic time ="
 STR_qsqr_time = "qsqr time ="
-STR_rows = "#rows ="
+#STR_rows = "#rows ="
 STR_vector = "Vector:"
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
@@ -115,8 +115,8 @@ def generateQueries(rule, arity, resultRecords):
             index = output.find(STR_qsqr_time)
             timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
 
-            index = output.find(STR_rows)
-            numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
+            #index = output.find(STR_rows)
+            #numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
 
             index = output.find(STR_vector)
             vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
@@ -130,12 +130,13 @@ def generateQueries(rule, arity, resultRecords):
             allFeatures = features[q]
             for v in vector:
                 allFeatures.append(v)
-            allFeatures.append(numResults)
+            #allFeatures.append(numResults)
             allFeatures.append(winnerAlgorithm)
 
             record = ""
             if len(allFeatures) > 5 + len(features[q]) + 2:
-                sys.stderr.write(q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
+                errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record
+                sys.stderr.write(errstr)
             for i, a in enumerate(allFeatures):
                 record += str(a)
                 if (i != len(allFeatures)-1):

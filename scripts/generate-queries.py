@@ -5,15 +5,14 @@ import random
 import argparse
 from collections import defaultdict
 from random import shuffle
-from subprocess import check_output, STDOUT, TimeoutExpired
+from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 
 STR_magic_time = "magic time ="
 STR_qsqr_time = "qsqr time ="
-STR_rows = "#rows ="
+#STR_rows = "#rows ="
 STR_vector = "Vector:"
 
 def generateQueries(rule, arity, resultRecords):
-
 
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
@@ -23,14 +22,21 @@ def generateQueries(rule, arity, resultRecords):
         if (i != arity-1):
             query += ","
     query += ")"
-    queries[100+(len(resultRecords))] = [query]
+
+    if (len(resultRecords) > 4):
+        if (150 in queries):
+            queries[150].append(query)
+        else
+            queries[150] = [query]
+    else:
+        queries[100+(len(resultRecords))] = [query]
     features[query] = [0,0] # not subject bound, not object bound
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
     if arity > 1:
         for i, key in enumerate(sorted(resultRecords)):
-            # i will be the type for us
+            # i will be the type of query for us
 
             # TODO: reduce the size of resultRecords[key] table to generate queries faster.
             maxRecords = min(20, len(resultRecords[key]))
@@ -79,10 +85,16 @@ def generateQueries(rule, arity, resultRecords):
                         query += ","
                 query += ")"
                 features[query] = [1, 1]
-                if (1000+i+1 in queries):
-                    queries[1000+i+1].append(query)
+                if (i > 3):
+                    if (1050 in queries):
+                        queries[1050].append(query)
+                    else:
+                        queries[1050] = [query]
                 else:
-                    queries[1000+i+1] = [query]
+                    if (1000+i+1 in queries):
+                        queries[1000+i+1].append(query)
+                    else:
+                        queries[1000+i+1] = [query]
 
 
 '''
@@ -108,6 +120,7 @@ def runQueries(queries, features):
             except CalledProcessError:
                 sys.stderr.write("Exception raised because of the following query:")
                 sys.stderr.write(q)
+                sys.stderr.write("\n")
                 timeout = True
 
             if timeout == False:
@@ -118,8 +131,8 @@ def runQueries(queries, features):
                 index = output.find(STR_qsqr_time)
                 timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
 
-                index = output.find(STR_rows)
-                numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
+                #index = output.find(STR_rows)
+                #numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
 
                 index = output.find(STR_vector)
                 vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
@@ -130,13 +143,11 @@ def runQueries(queries, features):
                 else:
                     winnerAlgorithm = "MagicSets"
 
-                features[q].append(int(numResults))
-
                 allFeatures = features[q]
                 for v in vector:
                     allFeatures.append(v)
+                #allFeatures.append(numResults)
                 allFeatures.append(winnerAlgorithm)
-
 
                 if float(timeQsqr) < float(timeMagic):
                     cntQSQRWon += 1
@@ -148,7 +159,8 @@ def runQueries(queries, features):
 
                 featureRecord = ""
                 if len(allFeatures) > 9:
-                    sys.stderr.write(q, " : " , "QSQR = " , timeQsqr, " Magic = ", timeMagic, " features : " , record)
+                    errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
+                    sys.stderr.write(errstr)
                 for i, a in enumerate(allFeatures):
                     featureRecord += str(a)
                     if (i != len(allFeatures)-1):
@@ -233,8 +245,8 @@ def parse_args():
     parser.add_argument('--rules' , type=str, required = True, help = 'Path to the rules file')
     parser.add_argument('--mat', type=str, required = True, help = 'Path to the materialized directory')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
-    parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type per predicate", default = 30)
-    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 25)
+    parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type", default = 30)
+    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 10)
     parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 50000)
     parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 1000000)
     parser.add_argument('--out', type=str, help = 'Name of the query output file')

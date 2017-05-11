@@ -40,7 +40,7 @@ flags.DEFINE_string(
     "",
     "Path to the test data.")
 
-COLUMNS = ["subjectBound", "objectBound", "numberOfRows", "numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
+COLUMNS = ["subjectBound", "objectBound", "numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
 LABEL_COLUMN = "label"
 
 # Categorical columns are the ones that have values from the finite set.
