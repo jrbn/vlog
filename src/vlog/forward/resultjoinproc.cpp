@@ -98,7 +98,7 @@ void InterTableJoinProcessor::processResults(std::vector<int> &blockid, Term_t *
 void InterTableJoinProcessor::processResultsAtPos(const int blockid, const uint8_t pos,
         const Term_t v, const bool unique) {
     enlargeArray(blockid);
-    segments[blockid]->addAt(posFromSecond != NULL ? posFromSecond[pos].first : pos, v);
+    segments[blockid]->addAt(nCopyFromSecond > pos ? posFromSecond[pos].first : pos, v);
 }
 
 void InterTableJoinProcessor::processResults(const int blockid, FCInternalTableItr *first,
@@ -423,12 +423,12 @@ void FinalTableJoinProcessor::processResultsAtPos(const int blockid, const uint8
         if (tmpt[blockid] == NULL) {
             tmpt[blockid] = new SegmentInserter(rowsize);
         }
-        tmpt[blockid]->addAt(posFromSecond != NULL ? posFromSecond[pos].first : pos, v);
+        tmpt[blockid]->addAt(nCopyFromSecond > pos ? posFromSecond[pos].first : pos, v);
     } else {
         if (utmpt[blockid] == NULL) {
             utmpt[blockid] = new SegmentInserter(rowsize);
         }
-        utmpt[blockid]->addAt(posFromSecond != NULL ? posFromSecond[pos].first : pos, v);
+        utmpt[blockid]->addAt(nCopyFromSecond > pos ? posFromSecond[pos].first : pos, v);
     }
 }
 
