@@ -135,7 +135,7 @@ def generateQueries(rule, arity, resultRecords):
 
             record = ""
             if len(allFeatures) > 5 + len(features[q]) + 2:
-                errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record
+                errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
                 sys.stderr.write(errstr)
             for i, a in enumerate(allFeatures):
                 record += str(a)
@@ -260,4 +260,3 @@ start = time.time()
 parseRulesFile(rulesFile)
 end = time.time()
 print (numQueryFeatures, " queries generated in ", (end-start)/60 , " minutes")
-

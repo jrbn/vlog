@@ -3,6 +3,7 @@ import subprocess
 import sys
 import random
 import argparse
+import time
 from collections import defaultdict
 from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
@@ -26,7 +27,7 @@ def generateQueries(rule, arity, resultRecords):
     if (len(resultRecords) > 4):
         if (150 in queries):
             queries[150].append(query)
-        else
+        else:
             queries[150] = [query]
     else:
         queries[100+(len(resultRecords))] = [query]
@@ -103,13 +104,17 @@ Query type is the key and list of queries of that type is the value.
 '''
 def runQueries(queries, features):
     data = ""
+    queryStats = ""
     featureString = ""
+    global numQueries
     for queryType in queries.keys():
+        print ("Running queries of type : ", queryType)
         shuffle(queries[queryType])
         cntQSQRWon = 0
         cntMagicWon = 0
         iterations = 0
         for q in queries[queryType]:
+            print ("Iteration #", iterations)
             # Here invoke vlog and execute query and get the runtime
             timeout = False
             try:
@@ -124,6 +129,7 @@ def runQueries(queries, features):
                 timeout = True
 
             if timeout == False:
+                numQueries += 1
                 output = str(output)
                 index = output.find(STR_magic_time)
                 timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
@@ -155,6 +161,7 @@ def runQueries(queries, features):
                     cntMagicWon += 1
 
                 record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
+                queryStats += record + "\n"
                 print (record)
 
                 featureRecord = ""
@@ -180,6 +187,8 @@ def runQueries(queries, features):
         fout.write(data)
     with open(outFile + '.features', 'a') as fout:
         fout.write(featureString)
+    with open(outFile + '.query.stats', 'w') as fout:
+        fout.write(queryStats)
 
 def blocks(fileObject, size=65536):
     while True:
@@ -246,7 +255,7 @@ def parse_args():
     parser.add_argument('--mat', type=str, required = True, help = 'Path to the materialized directory')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type", default = 30)
-    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 10)
+    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 20)
     parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 50000)
     parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 1000000)
     parser.add_argument('--out', type=str, help = 'Name of the query output file')
@@ -281,5 +290,9 @@ for root, dirs, files in os.walk(os.path.abspath(matDir)):
 
 queries = {}
 features= {}
+numQueries = 0
+start = time.time()
 parseRulesFile(rulesFile, rulesWithResult)
 runQueries(queries, features)
+end = time.time()
+print (numQueries, " queries generated in ", (end-start)/60 , " minutes")
