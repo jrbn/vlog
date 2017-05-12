@@ -1,0 +1,1 @@
+python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/Claros_LE.dlog --mat /var/scratch/uji300/vlog/materialization_claros_LE --conf edb-claros.conf --out claros-queries.dat 2> claros-genq-mat-errs.out
