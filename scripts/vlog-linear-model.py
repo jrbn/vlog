@@ -24,6 +24,7 @@ import pandas as pd
 import tensorflow as tf
 import sys
 import numpy as np
+from io import StringIO
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -138,10 +139,10 @@ def train_and_eval():
   df_train = df_train.dropna(how='any', axis=0)
   df_test = df_test.dropna(how='any', axis=0)
 
-  df_train[LABEL_COLUMN] = (
-      df_train["algorithm"].apply(lambda x: "QSQR" in x)).astype(int)
-  df_test[LABEL_COLUMN] = (
-      df_test["algorithm"].apply(lambda x: "QSQR" in x)).astype(int)
+  df_train[LABEL_COLUMN] = df_train["algorithm"]
+  #    (df_train["algorithm"].apply(lambda x: "QSQR" in x)).astype(int)
+  df_test[LABEL_COLUMN] = df_test["algorithm"]
+  #    (df_test["algorithm"].apply(lambda x: "QSQR" in x)).astype(int)
 
   model_dir = tempfile.mkdtemp() if not FLAGS.model_dir else FLAGS.model_dir
   print("model directory = %s" % model_dir)
@@ -152,11 +153,26 @@ def train_and_eval():
   for key in sorted(results):
     print("%s: %s" % (key, results[key]))
 
-  print ("Predictions : ", str(results))
-  #new_samples = np.array([[6, 3, 4, 1.12, 8, 1, 5, 0]], dtype=int)
-  #new_samples = [6, 3, 4, 1.12, 8, 1, 5, "QSQR"]
-  #y = m.predict(new_samples)
-  #print ("Predictions : ", str(y))
+  #print ("Predictions : ", str(results))
+ # new_samples = {
+ # "subjectBound":1,
+ # "objectBound":0,
+ # "numberOfResults":800,
+ # "costOfComputing":409141,
+ # "numberOfRules":74541,
+ # "numberOfQueries":98,
+ # "numberOfUniqueRules":0,
+ # "algorithm":1
+ # }
+  new_samples = StringIO("1, 0, 800, 409141, 74541, 98, 0, 1")
+  df_samples = pd.read_csv(new_samples,
+      names=COLUMNS,
+      skipinitialspace=True,
+      engine="python")
+  df_samples[LABEL_COLUMN] = df_samples["algorithm"]
+  y = m.predict(input_fn=lambda:input_fn(df_samples))
+
+  print(y)
 
 def main(_):
   train_and_eval()

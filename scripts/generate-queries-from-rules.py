@@ -123,9 +123,9 @@ def generateQueries(rule, arity, resultRecords):
             vector = vector_str.split(',')
 
             if float(timeQsqr) < float(timeMagic):
-                winnerAlgorithm = "QSQR"
+                winnerAlgorithm = 1 #"QSQR"
             else:
-                winnerAlgorithm = "MagicSets"
+                winnerAlgorithm = 0 #"MagicSets"
 
             allFeatures = features[q]
             for v in vector:
