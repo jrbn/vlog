@@ -178,7 +178,7 @@ def getVariablesFromAtom(atom):
 def getMatchingColumn(var1, var2):
     if len(var1) != len(var2):
         return -1
-    for i, v1, v2 in enumerate(zip(var1,var2)):
+    for i, (v1, v2) in enumerate(zip(var1,var2)):
         if v1 == v2:
             return i
     return -1
@@ -195,42 +195,49 @@ def parseRulesFile(rulesFile):
 
             variablesHead = getVariablesFromAtom(head)
             arity = len(head.split(','))
-            arityMap[rule] = arity
+            #arityMap[rule] = arity
             if (arity > 2):
                 sys.stderr.write("head : ", head, "\n")
 
             body = body.strip()
             atoms = get_atoms(body)
+            if rule not in rulesMap:
+                rulesMap[rule] = {}
+                rulesMap[rule]['arity'] = arity
+                rulesMap[rule]['atoms'] = []
 
             # Maintain index of TE /extensional predicate
-            if rule in rulesMap:
-                for atom in atoms:
+            for i, atom in enumerate(atoms):
+
+                if atom in rulesMap[rule]['atoms']:
+                    continue
+
+                if (atom.find("TE") == 0):
+                    rulesMap[rule]['indexOfExtPred'] = i
+                    matchingColumn = -2 # Means all constants are capable of geneating good queries
+                else:
                     variablesAtom = getVariablesFromAtom(atom)
                     matchingColumn = getMatchingColumn(variablesHead, variablesAtom)
-                    rulesMap[rule].add((atom, matchingColumn))
-            else:
-                for i, atom in enumerate(atoms):
-                    variablesAtom = getVariablesFromAtom(atom)
-                    matchingColumn = getMatchingColumn(variablesHead, variablesAtom)
-                    if i == 0:
-                        rulesMap[rule] = set((atom, matchingColumn))
-                    else:
-                        rulesMap[rule].add((atom, matchingColumn))
+                rulesMap[rule]['atoms'].append((atom, matchingColumn))
 
     # Use rulesMap to go over each rule and its possible implications
     for rule in sorted(rulesMap):
         print("Rule ", rule , ":")
         atomIndex = 0
         maxExploreLimit = min(5, len(rulesMap[rule]))
+
         while atomIndex < maxExploreLimit:
-            atom = rulesMap[rule][atomIndex][0]
+            #if atomIndex == rulesMap[rule]['indexOfExtPred']:
+            #    continue
+            atom = rulesMap[rule]['atoms'][atomIndex][0]
+            matchingColumn = rulesMap[rule]['atoms'][atomIndex][1]
             print("Checking atom ", atom)
             if atom.find("TE") == 0:
                 query = atom
                 query = query.strip()
             else:
                 newRule = atom.split('(')[0]
-                query = rulesMap[newRule][0]
+                query = rulesMap[newRule]['indexOfExtPred']
                 if query.find("TE") != 0:
                     print("Rule ", newRule, "does not derive anything useful: ", rulesMap[newRule])
                 else:
@@ -238,7 +245,7 @@ def parseRulesFile(rulesFile):
 
             # This query had no variables matching with the variables in the head of the rule
             # so results from this query will be useless
-            if (rulesMap[rule][atomIndex][1] == -1):
+            if (matchingColumn == -1):
                 atomIndex += 1
                 continue
 
@@ -269,7 +276,7 @@ def parseRulesFile(rulesFile):
                     # Pass only 10 pairs to generate query
                     maxRecords = min(10, len(resultRecords))
                     sampleRecords = resultRecords[:maxRecords]
-                    generateQueries(rule, arityMap[rule], sampleRecords, rulesMap[rule][atomIndex][1])
+                    generateQueries(rule, rulesMap[rule]['arity'], sampleRecords, matchingColumn)
                     break
             else:
                 atomIndex += 1
