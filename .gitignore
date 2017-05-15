@@ -6,3 +6,5 @@
 /build*
 /vlog*
 /MyTridentLink
+*.out
+*.err

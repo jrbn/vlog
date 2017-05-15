@@ -10,6 +10,9 @@ from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 STR_magic_time = "magic time ="
 STR_qsqr_time = "qsqr time ="
 STR_vector = "Vector:"
+
+MAX_LEVELS = 3
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
     parser.add_argument('--rules' , type=str, required=True, help = 'Path to the rules file')
@@ -20,14 +23,15 @@ def parse_args():
 
     return parser.parse_args()
 
-def generateQueries(rule, arity, resultRecords, matchingColumn):
-
+def generateQueries(rulePredicate, arity, resultRecords, variableMap):
+    # variable map will map which columns of result record map to which variables of the predicate for which
+    # we are generating queries
     global numQueryFeatures
     queries = set()
     features = {}
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
-    query = rule + "("
+    query = rulePredicate + "("
     for i in range(arity):
         query += chr(i+65)
         if (i != arity-1):
@@ -45,7 +49,7 @@ def generateQueries(rule, arity, resultRecords, matchingColumn):
                 continue
 
             for a in range(arity):
-                query = rule + "("
+                query = rulePredicate + "("
                 for j, column in enumerate(columns):
                     if (a == j):
                         if j == 0:
@@ -54,7 +58,10 @@ def generateQueries(rule, arity, resultRecords, matchingColumn):
                             features_value = [1, 0]
                         query += chr(j+65)
                     else:
-                        query += column
+                        if variableMap[j] == -1:
+                            break
+                        # Use the correct constant
+                        query += columns[variableMap[j]]
 
                     if (j != len(columns) -1):
                         query += ","
@@ -64,87 +71,33 @@ def generateQueries(rule, arity, resultRecords, matchingColumn):
                 features[query] = features_value
 
     # Boolean queries
-    for record in resultRecords:
-        columns = record.split()
+    uselessColumnExists = False
+    for v in variableMap:
+        if v == -1:
+            uselessColumnExists = True
 
-        # e.g. RP40(A,B) => RP50(X), RP51(X,Y)
-        # Then, results of RP50 will give only one column for booleam queries
-        if (len(columns) != arity):
-            break
+    if uselessColumnExists == False:
+        for record in resultRecords:
+            columns = record.split()
 
-        for a in range(arity):
-            query = rule + "("
-            for j, column in enumerate(columns):
-                query += column
-                if (j != len(columns) -1):
-                    query += ","
-            query += ")"
-            queries.add(query)
-            features[query] = [1, 1]
+            # e.g. RP40(A,B) => RP50(A), RP51(X,Y)
+            # Then, results of RP50 will give only one column for booleam queries
+            # we have to find out which variable of target predicate it maps to
+            if (len(columns) != arity):
+                break # boolean queries are not possible
 
-    queriesList = list(queries)
-    shuffle(queriesList)
-    data = ""
-    iterations = 1
-    for q in queriesList:
-        iterations += 1
-        if iterations == ARG_NQ:
-            break
+            for a in range(arity):
+                query = rulePredicate + "("
+                for j, column in enumerate(columns):
+                    query += columns[variableMap[j]]
+                    if (j != len(columns) -1):
+                        query += ","
+                query += ")"
+                queries.add(query)
+                features[query] = [1, 1]
 
-        timeout = False
-        try:
-            output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'both', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT*2)
-        except TimeoutExpired:
-            output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-            timeout = True
-        except CalledProcessError:
-            sys.stderr.write("Exception raised because of the following query:")
-            sys.stderr.write(q)
-            sys.stderr.write("\n")
-            timeout = True
+    return queries
 
-        if timeout == False:
-
-            numQueryFeatures += 1
-
-            output = str(output)
-            index = output.find(STR_magic_time)
-            timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
-
-            index = output.find(STR_qsqr_time)
-            timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
-
-            #index = output.find(STR_rows)
-            #numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
-
-            index = output.find(STR_vector)
-            vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
-            vector = vector_str.split(',')
-
-            if float(timeQsqr) < float(timeMagic):
-                winnerAlgorithm = 1 #"QSQR"
-            else:
-                winnerAlgorithm = 0 #"MagicSets"
-
-            allFeatures = features[q]
-            for v in vector:
-                allFeatures.append(v)
-            #allFeatures.append(numResults)
-            allFeatures.append(winnerAlgorithm)
-
-            record = ""
-            if len(allFeatures) > 5 + len(features[q]) + 2:
-                errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
-                sys.stderr.write(errstr)
-            for i, a in enumerate(allFeatures):
-                record += str(a)
-                if (i != len(allFeatures)-1):
-                    record += ","
-            record += "\n"
-            data += record
-
-    with open(outFile + ".csv", 'a') as fout:
-        fout.write(data)
 
 
 
@@ -175,111 +128,211 @@ def getVariablesFromAtom(atom):
     variables = variableString.split(',')
     return variables
 
-def getMatchingColumn(var1, var2):
-    if len(var1) != len(var2):
-        return -1
-    for i, (v1, v2) in enumerate(zip(var1,var2)):
-        if v1 == v2:
-            return i
-    return -1
+def getPredicateFromAtom(atom):
+    return atom.split('(')[0]
 
-def parseRulesFile(rulesFile):
+# Try to find variables of var1 into var2
+# and maintain indexes if found, -1 otherwise
+def getVariableIndexMap(var1, var2):
+    result = []
+    if len(var1) != len(var2):
+        return result
+    for i, v1 in enumerate(var1):
+        try:
+            index = var2.index(v1)
+        except ValueError:
+            index = -1
+        result.append(index)
+    return result
+
+def getVariableIndexMapForExtensionalPredicate(var, varExtPred):
+    for i, v in enumerate(varExtPred):
+        if v not in var:
+            del varExtPred[i]
+    return getVariableIndexMap(var, varExtPred)
+
+def generateHashTable(rulesFile):
     rulesMap = {}
-    arityMap = {}
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
             head = line.split(':')[0]
             body = line.split(':-')[1]
-            rule = head.split('(')[0]
+            rulePredicate = getPredicateFromAtom(head)
 
             variablesHead = getVariablesFromAtom(head)
             arity = len(head.split(','))
-            #arityMap[rule] = arity
             if (arity > 2):
                 sys.stderr.write("head : ", head, "\n")
 
             body = body.strip()
             atoms = get_atoms(body)
-            if rule not in rulesMap:
-                rulesMap[rule] = {}
-                rulesMap[rule]['arity'] = arity
-                rulesMap[rule]['atoms'] = []
+            if rulePredicate not in rulesMap:
+                rulesMap[rulePredicate] = {}
+                rulesMap[rulePredicate]['arity'] = arity
+                rulesMap[rulePredicate]['atoms'] = []
 
             # Maintain index of TE /extensional predicate
             for i, atom in enumerate(atoms):
-
-                if atom in rulesMap[rule]['atoms']:
+                atomPredicate = getPredicateFromAtom(atom)
+                if atomPredicate == rulePredicate:
+                    continue
+                if atom in rulesMap[rulePredicate]['atoms']:
                     continue
 
                 if (atom.find("TE") == 0):
-                    rulesMap[rule]['indexOfExtPred'] = i
-                    matchingColumn = -2 # Means all constants are capable of geneating good queries
+                    rulesMap[rulePredicate]['indexOfExtPred'] = i
+                    variablesAtom = getVariablesFromAtom(atom)
+                    variableMap = getVariableIndexMapForExtensionalPredicate(variablesHead, variablesAtom)
                 else:
                     variablesAtom = getVariablesFromAtom(atom)
-                    matchingColumn = getMatchingColumn(variablesHead, variablesAtom)
-                rulesMap[rule]['atoms'].append((atom, matchingColumn))
+                    variableMap = getVariableIndexMap(variablesHead, variablesAtom)
+                rulesMap[rulePredicate]['atoms'].append((atom, variableMap))
 
-    # Use rulesMap to go over each rule and its possible implications
-    for rule in sorted(rulesMap):
-        print("Rule ", rule , ":")
-        atomIndex = 0
-        maxExploreLimit = min(5, len(rulesMap[rule]))
+    return rulesMap
 
-        while atomIndex < maxExploreLimit:
-            #if atomIndex == rulesMap[rule]['indexOfExtPred']:
-            #    continue
-            atom = rulesMap[rule]['atoms'][atomIndex][0]
-            matchingColumn = rulesMap[rule]['atoms'][atomIndex][1]
-            print("Checking atom ", atom)
-            if atom.find("TE") == 0:
-                query = atom
-                query = query.strip()
+def analyzeQueries(queries):
+    shuffle(queries)
+    data = ""
+    iterations = 1
+    for q in queries:
+        iterations += 1
+        if iterations == ARG_NQ:
+            break
+
+        timeout = False
+        try:
+            output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'both', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT*2)
+        except TimeoutExpired:
+            output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
+            timeout = True
+        except CalledProcessError:
+            sys.stderr.write("Exception raised because of the following query:")
+            sys.stderr.write(q)
+            sys.stderr.write("\n")
+            timeout = True
+
+        if timeout == False:
+
+            numQueryFeatures += 1
+
+            output = str(output)
+            index = output.find(STR_magic_time)
+            timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
+
+            index = output.find(STR_qsqr_time)
+            timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
+
+            index = output.find(STR_vector)
+            vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
+            vector = vector_str.split(',')
+
+            if float(timeQsqr) < float(timeMagic):
+                winnerAlgorithm = 1 #"QSQR"
             else:
-                newRule = atom.split('(')[0]
-                query = rulesMap[newRule]['indexOfExtPred']
-                if query.find("TE") != 0:
-                    print("Rule ", newRule, "does not derive anything useful: ", rulesMap[newRule])
-                else:
-                    query = query.strip()
+                winnerAlgorithm = 0 #"MagicSets"
 
-            # This query had no variables matching with the variables in the head of the rule
-            # so results from this query will be useless
-            if (matchingColumn == -1):
-                atomIndex += 1
+            allFeatures = features[q]
+            for v in vector:
+                allFeatures.append(v)
+            allFeatures.append(winnerAlgorithm)
+
+            record = ""
+            if len(allFeatures) > 5 + len(features[q]) + 1:
+                errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
+                sys.stderr.write(errstr)
+            for i, a in enumerate(allFeatures):
+                record += str(a)
+                if (i != len(allFeatures)-1):
+                    record += ","
+            record += "\n"
+            data += record
+
+    with open(outFile + ".csv", 'a') as fout:
+        fout.write(data)
+
+'''
+Function which accepts a query and creates a vlog subprocess to run it.
+Parses the output of vlog and returns the array of result records
+'''
+def runVlog(query):
+    timeoutQSQR = False
+    try:
+        outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', query], stderr=STDOUT, timeout=ARG_TIMEOUT)
+    except TimeoutExpired:
+        outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
+        timeoutQSQR = True
+
+    strQSQR = str(outQSQR)
+    records = strQSQR.split('\\n')
+
+    if timeoutQSQR == True:
+        return []
+
+    resultStatRecord = records[-4]
+    numberOfRows = int(resultStatRecord[resultStatRecord.find("#rows = ") + 8:])
+    if numberOfRows != 0:
+        resultRecords = records[3:len(records)-5]
+        #print ("generating queries for ", rulePredicate)
+        # resultRecord contains all tuples from database that matched
+        # Pass only 10 pairs to generate query
+        maxRecords = min(10, len(resultRecords))
+        sampleRecords = resultRecords[:maxRecords]
+        return sampleRecords
+            #generateQueries(rulePredicate, rulesMap[rulePredicate]['arity'], sampleRecords, matchingColumn)
+
+def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries):
+
+    if recurseLevel > MAX_LEVELS:
+        return
+    indexExt = rulesMap[curPredicate]['indexOfExtPredicate']
+    workingPredicate = rulesMap[curPredicate]['atoms'][indexExt][0]
+
+    query = workingPredicate
+    query = query.strip()
+
+    resultRecords = runVlog(query)
+    if (len(resultRecords) != 0):
+        someQueries = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, rulesMap[curPredicate]['atoms'][indexExt][1])
+        resultQueries.extend(list(someQueries))
+        return
+
+    foundUsefulPredicate = False
+    for index, atom in enumerate(rulesMap[curPredicate]['atoms']):
+        if index == rulesMap[curPredicate]['indexOfExtPredicate']:
+            continue
+        atomPredicate = getPredicateFromAtom(atom[0])
+        atomMap = atom[1]
+        indexExt = rulesMap[atomPredicate]['indexOfExtPredicate']
+        workingPredicate = rulesMap[atomPredicate]['atoms'][indexExt][0]
+        workingMap = rulesMap[atomPredicate]['atoms'][indexExt][1]
+
+        query = workingPredicate
+        query = query.strip()
+        resultRecords = runVlog(query)
+        if (len(resultRecords) != 0):
+            for i,a in enumerate(atomMap):
+                if a == -1:
+                    workingMap[i] = -1
+            someQueries = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, workingMap)
+            resultQueries.extend(list(someQueries))
+            return
+    if not foundUsefulPredicate:
+        for index, atom in enumerate(rulesMap[curPredicate]['atoms']):
+            if index == rulesMap[curPredicate]['indexOfExtPredicate']:
                 continue
-
-            timeoutQSQR = False
-            try:
-                outQSQR = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'qsqr', '-l', 'info', '-q', query], stderr=STDOUT, timeout=ARG_TIMEOUT)
-            except TimeoutExpired:
-                outQSQR = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-                timeoutQSQR = True
-
-            strQSQR = str(outQSQR)
-            records = strQSQR.split('\\n')
-
-            if timeoutQSQR == False:
-                resultStatRecord = records[-4]
-                numberOfRows = int(resultStatRecord[resultStatRecord.find("#rows = ") + 8:])
-                if numberOfRows == 0:
-                    # apply recursive rule exploration strategy
-                    print (rule , " predicate is not in the database")
-                    print (atom, " did not produce any result records")
-                    atomIndex += 1
-                    continue
-                else:
-
-                    resultRecords = records[3:len(records)-5]
-                    print ("generating queries for ", rule)
-                    # resultRecord contains all tuples from database that matched
-                    # Pass only 10 pairs to generate query
-                    maxRecords = min(10, len(resultRecords))
-                    sampleRecords = resultRecords[:maxRecords]
-                    generateQueries(rule, rulesMap[rule]['arity'], sampleRecords, matchingColumn)
-                    break
-            else:
-                atomIndex += 1
+            workingPredicate = getPredicateFromAtom(atom[0])
+            workingMap = atom[1]
+            if targetPredicate == prevPredicate:
+                vmTarget = workingMap
+            prevPredicate = curPredicate
+            curPredicate = workingPredicate
+            vmPrev = vmCur
+            vmCur = workingMap
+            someQueries = exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries)
+            resultQueries.extend(list(someQueries))
+    # Return after all recursive calls
+    return
 
 resultFiles = []
 args = parse_args()
@@ -291,6 +344,10 @@ numQueryFeatures = 0
 with open(outFile + ".csv", 'w') as fout:
     fout.write("")
 start = time.time()
-parseRulesFile(rulesFile)
+rulesMap = generateHashTable(rulesFile)
+for rulePredicate in sorted(rulesMap):
+    resultQueries = []
+    exploreAllRules(rulesMap, 0, range(rulesMap[rulePredicate].arity), rulePredicate, None, rulePredicate, None, rulePredicate, resultQueries)
+    analyzeQueries(resultQueries)
 end = time.time()
 print (numQueryFeatures, " queries generated in ", (end-start)/60 , " minutes")
