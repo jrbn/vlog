@@ -26,7 +26,6 @@ def parse_args():
 def generateQueries(rulePredicate, arity, resultRecords, variableMap):
     # variable map will map which columns of result record map to which variables of the predicate for which
     # we are generating queries
-    global numQueryFeatures
     queries = set()
     features = {}
     # Generic query that results in all the possible records
@@ -96,7 +95,7 @@ def generateQueries(rulePredicate, arity, resultRecords, variableMap):
                 queries.add(query)
                 features[query] = [1, 1]
 
-    return queries
+    return queries, features
 
 
 
@@ -124,7 +123,7 @@ def get_atoms(body):
 
 def getVariablesFromAtom(atom):
     index = atom.find('(')
-    variableString = atom[index:atom.find(')', index)]
+    variableString = atom[index:atom.find(')', index+1)]
     variables = variableString.split(',')
     return variables
 
@@ -135,9 +134,7 @@ def getPredicateFromAtom(atom):
 # and maintain indexes if found, -1 otherwise
 def getVariableIndexMap(var1, var2):
     result = []
-    if len(var1) != len(var2):
-        return result
-    for i, v1 in enumerate(var1):
+    for v1 in var1:
         try:
             index = var2.index(v1)
         except ValueError:
@@ -146,10 +143,14 @@ def getVariableIndexMap(var1, var2):
     return result
 
 def getVariableIndexMapForExtensionalPredicate(var, varExtPred):
+    varFinal =[None] * len(var)
+    index = 0
     for i, v in enumerate(varExtPred):
         if v not in var:
-            del varExtPred[i]
-    return getVariableIndexMap(var, varExtPred)
+            continue
+        varFinal[index] = v
+        index += 1
+    return getVariableIndexMap(var, varFinal)
 
 def generateHashTable(rulesFile):
     rulesMap = {}
@@ -181,17 +182,19 @@ def generateHashTable(rulesFile):
                     continue
 
                 if (atom.find("TE") == 0):
-                    rulesMap[rulePredicate]['indexOfExtPred'] = i
+                    rulesMap[rulePredicate]['indexOfExtPredicate'] = i
                     variablesAtom = getVariablesFromAtom(atom)
                     variableMap = getVariableIndexMapForExtensionalPredicate(variablesHead, variablesAtom)
                 else:
                     variablesAtom = getVariablesFromAtom(atom)
                     variableMap = getVariableIndexMap(variablesHead, variablesAtom)
-                rulesMap[rulePredicate]['atoms'].append((atom, variableMap))
+                if not all (v == -1 for v in variableMap):
+                    rulesMap[rulePredicate]['atoms'].append((atom, variableMap))
 
     return rulesMap
 
-def analyzeQueries(queries):
+def analyzeQueries(queries, features):
+    global numQueryFeatures
     shuffle(queries)
     data = ""
     iterations = 1
@@ -237,14 +240,15 @@ def analyzeQueries(queries):
                 allFeatures.append(v)
             allFeatures.append(winnerAlgorithm)
 
-            record = ""
             if len(allFeatures) > 5 + len(features[q]) + 1:
                 errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
                 sys.stderr.write(errstr)
+            record = ""
             for i, a in enumerate(allFeatures):
                 record += str(a)
                 if (i != len(allFeatures)-1):
                     record += ","
+            print(q ," : ", record)
             record += "\n"
             data += record
 
@@ -279,10 +283,11 @@ def runVlog(query):
         maxRecords = min(10, len(resultRecords))
         sampleRecords = resultRecords[:maxRecords]
         return sampleRecords
-            #generateQueries(rulePredicate, rulesMap[rulePredicate]['arity'], sampleRecords, matchingColumn)
+    return []
 
-def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries):
+def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries, resultFeatures):
 
+    print ("recursion level : ", recurseLevel)
     if recurseLevel > MAX_LEVELS:
         return
     indexExt = rulesMap[curPredicate]['indexOfExtPredicate']
@@ -293,10 +298,13 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
 
     resultRecords = runVlog(query)
     if (len(resultRecords) != 0):
-        someQueries = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, rulesMap[curPredicate]['atoms'][indexExt][1])
-        resultQueries.extend(list(someQueries))
+        print ("Generating queries for ", targetPredicate, " with map : ", str(rulesMap[curPredicate]['atoms'][indexExt][1]) )
+        someQueries, featureMap = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, rulesMap[curPredicate]['atoms'][indexExt][1])
+        resultQueries.append(list(someQueries))
+        resultFeatures.append(featureMap)
         return
 
+    print ("Working predicate ", workingPredicate , " did not produce any results")
     foundUsefulPredicate = False
     for index, atom in enumerate(rulesMap[curPredicate]['atoms']):
         if index == rulesMap[curPredicate]['indexOfExtPredicate']:
@@ -307,6 +315,8 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
         workingPredicate = rulesMap[atomPredicate]['atoms'][indexExt][0]
         workingMap = rulesMap[atomPredicate]['atoms'][indexExt][1]
 
+        print ("atom predicate: " , atomPredicate, " atomMap : ", str(atomMap))
+        print ("working predicate: " , workingPredicate, " workingMap : ", str(workingMap))
         query = workingPredicate
         query = query.strip()
         resultRecords = runVlog(query)
@@ -314,8 +324,10 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
             for i,a in enumerate(atomMap):
                 if a == -1:
                     workingMap[i] = -1
-            someQueries = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, workingMap)
-            resultQueries.extend(list(someQueries))
+            print("Generating queries for ", targetPredicate, " with map : ", str(workingMap))
+            someQueries, featureMap = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, workingMap)
+            resultQueries.append(list(someQueries))
+            resultFeatures.append(featureMap)
             return
     if not foundUsefulPredicate:
         for index, atom in enumerate(rulesMap[curPredicate]['atoms']):
@@ -329,8 +341,11 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
             curPredicate = workingPredicate
             vmPrev = vmCur
             vmCur = workingMap
-            someQueries = exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries)
-            resultQueries.extend(list(someQueries))
+            newQueries = []
+            newFeatures = []
+            exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, newQueries, newFeatures)
+            resultQueries.append(newQueries)
+            resultFeatures.append(newFeatures)
     # Return after all recursive calls
     return
 
@@ -345,9 +360,16 @@ with open(outFile + ".csv", 'w') as fout:
     fout.write("")
 start = time.time()
 rulesMap = generateHashTable(rulesFile)
+# TODO: Randomly select 100 rules
 for rulePredicate in sorted(rulesMap):
-    resultQueries = []
-    exploreAllRules(rulesMap, 0, range(rulesMap[rulePredicate].arity), rulePredicate, None, rulePredicate, None, rulePredicate, resultQueries)
-    analyzeQueries(resultQueries)
+    print ("Predicate ", rulePredicate , " : ")
+    resultQueries = [] # List of lists of queries
+    resultFeatures = [] # List of maps
+    initMap = [None] * rulesMap[rulePredicate]['arity']
+    for i in range(rulesMap[rulePredicate]['arity']):
+        initMap[i] = i
+    exploreAllRules(rulesMap, 0, initMap, rulePredicate, None, rulePredicate, None, rulePredicate, resultQueries, resultFeatures)
+    for r,f in zip(resultQueries, resultFeatures):
+        analyzeQueries(r, f)
 end = time.time()
 print (numQueryFeatures, " queries generated in ", (end-start)/60 , " minutes")

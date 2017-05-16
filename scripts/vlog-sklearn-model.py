@@ -1,9 +1,7 @@
 import argparse
 from patsy import dmatrices
 from sklearn.linear_model import LogisticRegression
-#from sklearn.cross_validation import train_test_split
 from sklearn import metrics
-#from sklearn.cross_validation import cross_val_score
 
 import pandas as pd
 import sys
@@ -59,13 +57,17 @@ def train_and_eval(train_file, test_file):
 
     TP, FP, TN, FN = perf_measures(list(yTest.values), list(predicted))
 
+    #print ("TP: ", TP)
+    #print ("TN: ", TN)
+    #print ("FP: ", FP)
+    #print ("FN: ", FN)
     precision = TP / (TP + FP)
     recall = TP / (TP + FN)
-    accuracy = TP + TN / (TP + TN + FP + FN)
+    f1score = 2*precision * recall / (precision + recall)
     #print (metrics.accuracy_score(yTest, predicted))
     print ("Precision = ", precision)
     print("Recall = ", recall)
-    print("Accuracy = ", accuracy)
+    print("Accuracy = ", f1score)
 
 def parse_args():
     parser = argparse.ArgumentParser(description = "Simple linear model")
