@@ -102,7 +102,7 @@ def generate_feature_files(train, phase):
                 features = copy.deepcopy(columns)
                 # Delete the ith column
                 del(features[i])
-                data[i] += ",". join(features) + "\n"
+                data[i] += ",". join(features)
                 i += 1
         print("Finished making features")
         i = 0
@@ -117,7 +117,7 @@ args = parse_args()
 train = args.train_file
 test = args.test_file
 n = generate_feature_files(train, "train")
-generate_feature_files(train, "test")
+generate_feature_files(test, "test")
 
 # Run linear model
 i = 0
