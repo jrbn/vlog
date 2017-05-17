@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 import argparse
+import copy
 from collections import defaultdict
 from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
@@ -195,7 +196,9 @@ def generateHashTable(rulesFile):
 
 def analyzeQueries(queries, features):
     global numQueryFeatures
+    queries = list(set(queries))
     shuffle(queries)
+    logQueries = ""
     data = ""
     iterations = 1
     for q in queries:
@@ -235,7 +238,7 @@ def analyzeQueries(queries, features):
             else:
                 winnerAlgorithm = 0 #"MagicSets"
 
-            allFeatures = features[q]
+            allFeatures = copy.deepcopy(features[q])
             for v in vector:
                 allFeatures.append(v)
             allFeatures.append(winnerAlgorithm)
@@ -249,11 +252,14 @@ def analyzeQueries(queries, features):
                 if (i != len(allFeatures)-1):
                     record += ","
             print(q ," : ", record)
+            logQueries += q + "\n"
             record += "\n"
             data += record
 
     with open(outFile + ".csv", 'a') as fout:
         fout.write(data)
+    with open(outFile + ".queries", 'a') as fout:
+        fout.write(logQueries)
 
 '''
 Function which accepts a query and creates a vlog subprocess to run it.
@@ -300,8 +306,9 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
     if (len(resultRecords) != 0):
         print ("Generating queries for ", targetPredicate, " with map : ", str(rulesMap[curPredicate]['atoms'][indexExt][1]) )
         someQueries, featureMap = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, rulesMap[curPredicate]['atoms'][indexExt][1])
-        resultQueries.append(list(someQueries))
-        resultFeatures.append(featureMap)
+        for q in someQueries:
+            resultQueries.append(q)
+        resultFeatures.update(featureMap)
         return
 
     print ("Working predicate ", workingPredicate , " did not produce any results")
@@ -326,8 +333,9 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
                     workingMap[i] = -1
             print("Generating queries for ", targetPredicate, " with map : ", str(workingMap))
             someQueries, featureMap = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, workingMap)
-            resultQueries.append(list(someQueries))
-            resultFeatures.append(featureMap)
+            for q in someQueries:
+                resultQueries.append(q)
+            resultFeatures.update(featureMap)
             return
     if not foundUsefulPredicate:
         for index, atom in enumerate(rulesMap[curPredicate]['atoms']):
@@ -342,10 +350,11 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
             vmPrev = vmCur
             vmCur = workingMap
             newQueries = []
-            newFeatures = []
-            exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, newQueries, newFeatures)
-            resultQueries.append(newQueries)
-            resultFeatures.append(newFeatures)
+            newFeatureMap = {}
+            exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, newQueries, newFeatureMap)
+            for q in newQueries:
+                resultQueries.append(q)
+            resultFeatures.update(newFeatureMap)
     # Return after all recursive calls
     return
 
@@ -358,18 +367,23 @@ outFile = args.out
 numQueryFeatures = 0
 with open(outFile + ".csv", 'w') as fout:
     fout.write("")
+with open(outFile + ".queries", 'w') as fout:
+    fout.write("")
 start = time.time()
 rulesMap = generateHashTable(rulesFile)
 # TODO: Randomly select 100 rules
+index = 0
 for rulePredicate in sorted(rulesMap):
+    index += 1
+    if index > 100:
+        break
     print ("Predicate ", rulePredicate , " : ")
     resultQueries = [] # List of lists of queries
-    resultFeatures = [] # List of maps
+    resultFeatures = {} # Map of queries to features
     initMap = [None] * rulesMap[rulePredicate]['arity']
     for i in range(rulesMap[rulePredicate]['arity']):
         initMap[i] = i
     exploreAllRules(rulesMap, 0, initMap, rulePredicate, None, rulePredicate, None, rulePredicate, resultQueries, resultFeatures)
-    for r,f in zip(resultQueries, resultFeatures):
-        analyzeQueries(r, f)
+    analyzeQueries(resultQueries, resultFeatures)
 end = time.time()
 print (numQueryFeatures, " queries generated in ", (end-start)/60 , " minutes")

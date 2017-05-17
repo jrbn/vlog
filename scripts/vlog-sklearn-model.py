@@ -43,13 +43,13 @@ def train_and_eval(train_file, test_file):
     df_train = df_train.dropna(how='any', axis=0)
     df_test = df_test.dropna(how='any', axis=0)
 
-    y,X = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + \
+    y,X = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + costOfComputing + \
     numberOfRules + numberOfQueries + numberOfUniqueRules', df_train, return_type = "dataframe")
     y = np.ravel(y)
     model = LogisticRegression()
     model = model.fit(X, y)
 
-    yTest, xTest = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + \
+    yTest, xTest = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + costOfComputing +\
     numberOfRules + numberOfQueries + numberOfUniqueRules', df_test, return_type = "dataframe")
     # check the accuracy on the training set
 
@@ -68,6 +68,11 @@ def train_and_eval(train_file, test_file):
     print ("Precision = ", precision)
     print("Recall = ", recall)
     print("Accuracy = ", f1score)
+    data = ""
+    for p in predicted:
+        data += str(p) + "\n"
+    with open(test_file + '.predictions', 'w') as fout:
+        fout.write(data)
 
 def parse_args():
     parser = argparse.ArgumentParser(description = "Simple linear model")

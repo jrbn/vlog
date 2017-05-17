@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 
 def parse_args():
-    parser = argparse.ArgumentParser(description = "Simple linear model")
+    parser = argparse.ArgumentParser(description = "Ablation Study")
     parser.add_argument('--train_file', type=str, required=True, help='Training data csv file')
     parser.add_argument('--test_file', type=str, required=True, help='Test data csv file')
     return parser.parse_args()

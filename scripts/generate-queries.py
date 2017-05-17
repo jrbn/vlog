@@ -3,6 +3,7 @@ import subprocess
 import sys
 import random
 import argparse
+import copy
 import time
 from collections import defaultdict
 from random import shuffle
@@ -109,11 +110,12 @@ def runQueries(queries, features):
     global numQueries
     for queryType in queries.keys():
         print ("Running queries of type : ", queryType)
-        shuffle(queries[queryType])
+        uniqueQueries = list(set(queries[queryType]))
+        shuffle(uniqueQueries)
         cntQSQRWon = 0
         cntMagicWon = 0
         iterations = 0
-        for q in queries[queryType]:
+        for q in uniqueQueries:
             print ("Iteration #", iterations)
             # Here invoke vlog and execute query and get the runtime
             timeout = False
@@ -149,7 +151,7 @@ def runQueries(queries, features):
                 else:
                     winnerAlgorithm = 0 #"MagicSets"
 
-                allFeatures = features[q]
+                allFeatures = copy.deepcopy(features[q])
                 for v in vector:
                     allFeatures.append(v)
                 #allFeatures.append(numResults)
