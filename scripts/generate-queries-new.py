@@ -7,6 +7,7 @@ import copy
 from collections import defaultdict
 from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
+import random
 
 STR_magic_time = "magic time ="
 STR_qsqr_time = "qsqr time ="
@@ -373,7 +374,9 @@ start = time.time()
 rulesMap = generateHashTable(rulesFile)
 # TODO: Randomly select 100 rules
 index = 0
-for rulePredicate in sorted(rulesMap):
+items = list(rulesMap.keys())
+random.shuffle(items)
+for rulePredicate in items:
     index += 1
     if index > 100:
         break
