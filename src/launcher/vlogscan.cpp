@@ -132,8 +132,17 @@ bool VLogScan::first(uint64_t first, bool constrained1, uint64_t second, bool co
         }
     }
 
+#if TERM_IS_UINT64
+    std::vector<Term_t> *pkeys = keys;
+#else
+    std::vector<Term_t> *pkeys = new std::vector<Term_t>();
+    for (int i = 0; i < keys->size(); i++) {
+	Term_t value((*keys)[i]);
+	pkeys->push_back(value);
+    }
+#endif
     TupleIterator *tmpitr = r->getIterator(
-            query, keypos, keys, layer, p,
+            query, keypos, pkeys, layer, p,
             false, &sortByFields);
     iterator = std::unique_ptr<TupleIterator>(tmpitr);
 
@@ -142,6 +151,9 @@ bool VLogScan::first(uint64_t first, bool constrained1, uint64_t second, bool co
         return true;
 
     }
+#if ! TERM_IS_UINT64
+    delete pkeys;
+#endif
     return false;
 }
 

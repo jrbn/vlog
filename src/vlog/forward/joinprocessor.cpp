@@ -1017,11 +1017,13 @@ void JoinExecutor::hashjoin(const FCInternalTable * t1, SemiNaiver * naiver,
     JoinHashMap map;
     DoubleJoinHashMap doublemap;
 
+    Term_t term_empty = EMPTY_KEY_TERM;
+
     if (joinsCoordinates.size() < 2) {
-        map.set_empty_key(std::numeric_limits<Term_t>::max());
+        map.set_empty_key(term_empty);
     } else {
-        doublemap.set_empty_key(std::make_pair(std::numeric_limits<Term_t>::max(),
-                                               std::numeric_limits<Term_t>::max()));
+        doublemap.set_empty_key(std::make_pair(term_empty,
+                                               term_empty));
     }
 
     std::vector<Term_t> values;

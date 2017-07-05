@@ -741,7 +741,6 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 	    boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
 	    for (int j = 0; j < times; j++) {
 		TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
-		int sz = iter->getTupleSize();
 		while (iter->hasNext()) {
 		    iter->next();
 		}

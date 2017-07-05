@@ -336,7 +336,7 @@ TupleTable *BindingsTable::filter(const Literal &l, const std::vector<uint8_t> *
 		rc[i] = row[i];
 	    }
             output->addRow(rc);
-	    delete rc;
+	    delete[] rc;
 #endif
 	}
     }

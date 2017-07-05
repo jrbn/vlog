@@ -17,6 +17,8 @@
 
 #if TERM_AS_STRUCT
 
+#define EMPTY_KEY_TERM Term_t(std::numeric_limits<__TERM_TYPE>::max())
+
 #include <boost/functional/hash.hpp>
 
 // Set to 0 if Term_t is not uint64_t.
@@ -103,6 +105,8 @@ namespace boost
 #define TERM_IS_UINT64 __TERM_TYPE_IS_UINT64_T
 
 typedef __TERM_TYPE Term_t;
+
+#define EMPTY_KEY_TERM (std::numeric_limits<Term_t>::max())
 
 #endif
 #endif
