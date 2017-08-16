@@ -8,3 +8,11 @@
 /MyTridentLink
 *.out
 *.err
+**/build*
+*.csv
+*.predictions
+*.stats
+*.features
+*.queries
+*.answer
+*.dat
