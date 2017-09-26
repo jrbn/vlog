@@ -992,3 +992,28 @@ std::string Program::tostring() {
     }
     return output;
 }
+
+
+std::vector<Substitution> concat(std::vector<Substitution>& sigma1, std::vector<Substitution>& sigma2) {
+    std::vector<Substitution> result;
+    for (std::vector<Substitution>::iterator itr1 = sigma1.begin(); itr1 != sigma1.end(); ++itr1) {
+        for (std::vector<Substitution>::iterator itr2 = sigma2.begin(); itr2 != sigma2.end(); ++itr2) {
+            if (itr1->origin == itr2->origin) {
+                result.push_back(Substitution(itr1->destination.getId(), VTerm(itr2->destination.getId(), 0)));
+            }
+        }
+    }
+    return result;
+}
+
+std::vector<Substitution> inverse_concat(std::vector<Substitution>& sigma1, std::vector<Substitution>& sigma2) {
+    std::vector<Substitution> result;
+    for (std::vector<Substitution>::iterator itr1 = sigma1.begin(); itr1 != sigma1.end(); ++itr1) {
+        for (std::vector<Substitution>::iterator itr2 = sigma2.begin(); itr2 != sigma2.end(); ++itr2) {
+            if (itr1->destination == itr2->destination) {
+                result.push_back(Substitution(itr1->origin, VTerm(itr2->origin, 0)));
+            }
+        }
+    }
+    return result;
+}

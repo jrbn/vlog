@@ -417,11 +417,11 @@ void generateTrainingQueries(int argc,
             Predicate pb = itr->getPredicate();
             std::vector<Substitution> sigmaB;
             for (int j = 0; j < pb.getCardinality(); ++j) {
-                VTerm dest = ri.getHead().getTuple().get(j);
+                VTerm dest = itr->getTuple().get(j);
                 sigmaB.push_back(Substitution(vt[j], dest));
             }
             // Calculate sigmaB * sigmaH
-            reverse_concat(sigmaB, sigmaH);
+            std::vector<Substitution> edge_label = inverse_concat(sigmaB, sigmaH);
         }
         std::cout << std::endl;
     }
