@@ -7,7 +7,7 @@ import pandas as pd
 import sys
 import numpy as np
 
-COLUMNS = ["subjectBound", "objectBound", "numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
+COLUMNS = ["numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
 
 def perf_measures(yActual, yPredicted):
     TP = 0
@@ -43,13 +43,13 @@ def train_and_eval(train_file, test_file):
     df_train = df_train.dropna(how='any', axis=0)
     df_test = df_test.dropna(how='any', axis=0)
 
-    y,X = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + costOfComputing + \
+    y,X = dmatrices ('algorithm ~ numberOfResults + costOfComputing + \
     numberOfRules + numberOfQueries + numberOfUniqueRules', df_train, return_type = "dataframe")
     y = np.ravel(y)
     model = LogisticRegression()
     model = model.fit(X, y)
 
-    yTest, xTest = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + costOfComputing +\
+    yTest, xTest = dmatrices ('algorithm ~ numberOfResults + costOfComputing +\
     numberOfRules + numberOfQueries + numberOfUniqueRules', df_test, return_type = "dataframe")
     # check the accuracy on the training set
 

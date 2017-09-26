@@ -8,6 +8,8 @@ from collections import defaultdict
 from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 import random
+# Trident database library
+import trident
 
 STR_magic_time = "magic time ="
 STR_qsqr_time = "qsqr time ="
@@ -25,11 +27,19 @@ def parse_args():
 
     return parser.parse_args()
 
+def getDatabaseLocation(confFile):
+    with open(confFile, 'r') as fin:
+        lines = fin.readlines()
+        for line in lines:
+            params = line.split('=')
+            if (params[0] == 'EDB0_param0'):
+                return params[1].strip()
+        return ''
+
 def generateQueries(rulePredicate, arity, resultRecords, variableMap):
     # variable map will map which columns of result record map to which variables of the predicate for which
     # we are generating queries
     queries = set()
-    features = {}
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
     query = rulePredicate + "("
@@ -39,7 +49,6 @@ def generateQueries(rulePredicate, arity, resultRecords, variableMap):
             query += ","
     query += ")"
     queries.add(query)
-    features[query] = [0, 0]
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
@@ -53,10 +62,6 @@ def generateQueries(rulePredicate, arity, resultRecords, variableMap):
                 query = rulePredicate + "("
                 for j, column in enumerate(columns):
                     if (a == j):
-                        if j == 0:
-                            features_value = [0, 1]
-                        else:
-                            features_value = [1, 0]
                         query += chr(j+65)
                     else:
                         if variableMap[j] == -1:
@@ -69,7 +74,6 @@ def generateQueries(rulePredicate, arity, resultRecords, variableMap):
                 query += ")"
 
                 queries.add(query)
-                features[query] = features_value
 
     # Boolean queries
     uselessColumnExists = False
@@ -95,9 +99,8 @@ def generateQueries(rulePredicate, arity, resultRecords, variableMap):
                         query += ","
                 query += ")"
                 queries.add(query)
-                features[query] = [1, 1]
 
-    return queries, features
+    return queries
 
 
 
@@ -195,7 +198,7 @@ def generateHashTable(rulesFile):
 
     return rulesMap
 
-def analyzeQueries(queries, features):
+def analyzeQueries(queries):
     global numQueryFeatures
     queries = list(set(queries))
     shuffle(queries)
@@ -239,12 +242,12 @@ def analyzeQueries(queries, features):
             else:
                 winnerAlgorithm = 0 #"MagicSets"
 
-            allFeatures = copy.deepcopy(features[q])
+            allFeatures = []
             for v in vector:
                 allFeatures.append(v)
             allFeatures.append(winnerAlgorithm)
 
-            if len(allFeatures) > 5 + len(features[q]) + 1:
+            if len(allFeatures) > 6:
                 errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
                 sys.stderr.write(errstr)
             record = ""
@@ -292,16 +295,28 @@ def runVlog(query):
         return sampleRecords
     return []
 
-def runTrident(query):
+def runTrident(query, db):
     results = []
     # Get predicate from the query
+    variables = getVariablesFromAtom(query)
+    predicate = variables[1]
+    print("EDB predicate : ", predicate )
+
+    pred_id = db.lookup_id(str(predicate))
+    if pred_id is not None:
+        sps = db.os(pred_id)
+        nRecords = min(len(sps), 50)
+        records = sps[:50]
+        for sp in records:
+            row = db.lookup_str(sp[0]) + " " + db.lookup_str(sp[1])
+            results.append(row)
     # Get id of the predicate (db.lookup_id('predicate string'))
     # get all possible <s,o> pairs (db.os(predicate id))
     # construct results array
     return results
 
 
-def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries, resultFeatures):
+def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, resultQueries, db):
 
     print ("recursion level : ", recurseLevel)
     if recurseLevel > MAX_LEVELS:
@@ -312,13 +327,14 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
     query = workingPredicate
     query = query.strip()
 
-    resultRecords = runVlog(query)
+    print ("Query: ", query)
+    #resultRecords = runVlog(query)
+    resultRecords = runTrident(query, db)
     if (len(resultRecords) != 0):
-        print ("Generating queries for ", targetPredicate, " with map : ", str(rulesMap[curPredicate]['atoms'][indexExt][1]) )
-        someQueries, featureMap = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, rulesMap[curPredicate]['atoms'][indexExt][1])
+        #print ("Generating queries for ", targetPredicate, " with map : ", str(rulesMap[curPredicate]['atoms'][indexExt][1]) )
+        someQueries = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, rulesMap[curPredicate]['atoms'][indexExt][1])
         for q in someQueries:
             resultQueries.append(q)
-        resultFeatures.update(featureMap)
         return
 
     print ("Working predicate ", workingPredicate , " did not produce any results")
@@ -332,8 +348,8 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
         workingPredicate = rulesMap[atomPredicate]['atoms'][indexExt][0]
         workingMap = rulesMap[atomPredicate]['atoms'][indexExt][1]
 
-        print ("atom predicate: " , atomPredicate, " atomMap : ", str(atomMap))
-        print ("working predicate: " , workingPredicate, " workingMap : ", str(workingMap))
+        #print ("atom predicate: " , atomPredicate, " atomMap : ", str(atomMap))
+        #print ("working predicate: " , workingPredicate, " workingMap : ", str(workingMap))
         query = workingPredicate
         query = query.strip()
         resultRecords = runVlog(query)
@@ -341,11 +357,10 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
             for i,a in enumerate(atomMap):
                 if a == -1:
                     workingMap[i] = -1
-            print("Generating queries for ", targetPredicate, " with map : ", str(workingMap))
-            someQueries, featureMap = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, workingMap)
+            #print("Generating queries for ", targetPredicate, " with map : ", str(workingMap))
+            someQueries = generateQueries(targetPredicate, rulesMap[targetPredicate]['arity'], resultRecords, workingMap)
             for q in someQueries:
                 resultQueries.append(q)
-            resultFeatures.update(featureMap)
             return
     if not foundUsefulPredicate:
         for index, atom in enumerate(rulesMap[curPredicate]['atoms']):
@@ -361,10 +376,9 @@ def exploreAllRules(rulesMap, recurseLevel, vmTarget, targetPredicate, vmPrev, p
             vmCur = workingMap
             newQueries = []
             newFeatureMap = {}
-            exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, newQueries, newFeatureMap)
+            exploreAllRules(rulesMap, recurseLevel+1, vmTarget, targetPredicate, vmPrev, prevPredicate, vmCur, curPredicate, newQueries, db)
             for q in newQueries:
                 resultQueries.append(q)
-            resultFeatures.update(newFeatureMap)
     # Return after all recursive calls
     return
 
@@ -373,6 +387,8 @@ args = parse_args()
 ARG_TIMEOUT = args.timeout
 ARG_NQ = args.nq
 rulesFile = args.rules
+dbFile = getDatabaseLocation(args.conf)
+db = trident.Db(dbFile)
 outFile = args.out
 numQueryFeatures = 0
 with open(outFile + ".csv", 'w') as fout:
@@ -389,13 +405,13 @@ for rulePredicate in items:
     index += 1
     if index > 100:
         break
-    print ("Predicate ", rulePredicate , " : ")
+    print ("Rule Predicate ", rulePredicate , " : ")
     resultQueries = [] # List of lists of queries
     resultFeatures = {} # Map of queries to features
     initMap = [None] * rulesMap[rulePredicate]['arity']
     for i in range(rulesMap[rulePredicate]['arity']):
         initMap[i] = i
-    exploreAllRules(rulesMap, 0, initMap, rulePredicate, None, rulePredicate, None, rulePredicate, resultQueries, resultFeatures)
-    analyzeQueries(resultQueries, resultFeatures)
+    exploreAllRules(rulesMap, 0, initMap, rulePredicate, None, rulePredicate, None, rulePredicate, resultQueries, db)
+    analyzeQueries(resultQueries)
 end = time.time()
 print (numQueryFeatures, " queries generated in ", (end-start)/60 , " minutes")

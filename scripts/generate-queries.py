@@ -32,7 +32,6 @@ def generateQueries(rule, arity, resultRecords):
             queries[150] = [query]
     else:
         queries[100+(len(resultRecords))] = [query]
-    features[query] = [0,0] # not subject bound, not object bound
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
@@ -50,10 +49,6 @@ def generateQueries(rule, arity, resultRecords):
                     query = rule + "("
                     for j, column in enumerate(record):
                         if (a == j):
-                            if j == 0:
-                                features_value = [0, 1] # Object bound (constant)
-                            else:
-                                features_value = [1, 0]
                             query += chr(j+65)
                         else:
                             query += column
@@ -61,7 +56,6 @@ def generateQueries(rule, arity, resultRecords):
                         if (j != len(record) -1):
                             query += ","
                     query += ")"
-                    features[query] = features_value
 
                     # Fix the number of types
                     # If step count is >3, write 50 as the query type
@@ -87,7 +81,6 @@ def generateQueries(rule, arity, resultRecords):
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
-                features[query] = [1, 1]
                 if (i > 3):
                     if (1050 in queries):
                         queries[1050].append(query)
@@ -104,7 +97,7 @@ def generateQueries(rule, arity, resultRecords):
 This function takses the queries dictionary has the input.
 Query type is the key and list of queries of that type is the value.
 '''
-def runQueries(queries, features):
+def runQueries(queries):
     data = ""
     queryStats = ""
     featureString = ""
@@ -160,7 +153,7 @@ def runQueries(queries, features):
                 else:
                     winnerAlgorithm = 0 #"MagicSets"
 
-                allFeatures = copy.deepcopy(features[q])
+                allFeatures = []
                 for v in vector:
                     allFeatures.append(v)
                 #allFeatures.append(numResults)
@@ -176,7 +169,7 @@ def runQueries(queries, features):
                 print (record)
 
                 featureRecord = ""
-                if len(allFeatures) > 9:
+                if len(allFeatures) > 7:
                     errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
                     sys.stderr.write(errstr)
                 for i, a in enumerate(allFeatures):
@@ -267,7 +260,7 @@ def parse_args():
     parser.add_argument('--mat', type=str, required = True, help = 'Path to the materialized directory')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type", default = 30)
-    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 30)
+    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 40)
     parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 50000)
     parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 1000000)
     parser.add_argument('--out', type=str, help = 'Name of the query output file')
@@ -301,10 +294,9 @@ for root, dirs, files in os.walk(os.path.abspath(matDir)):
         #print (f)
 
 queries = {}
-features= {}
 numQueries = 0
 start = time.time()
 parseRulesFile(rulesFile, rulesWithResult)
-runQueries(queries, features)
+runQueries(queries)
 end = time.time()
 print (numQueries, " queries generated in ", (end-start)/60 , " minutes")

@@ -25,7 +25,6 @@ def generateQueries(rule, arity, resultRecords):
 
     global numQueryFeatures
     queries = set()
-    features = {}
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
     query = rule + "("
@@ -35,7 +34,6 @@ def generateQueries(rule, arity, resultRecords):
             query += ","
     query += ")"
     queries.add(query)
-    features[query] = [0, 0]
 
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
@@ -49,10 +47,6 @@ def generateQueries(rule, arity, resultRecords):
                 query = rule + "("
                 for j, column in enumerate(columns):
                     if (a == j):
-                        if j == 0:
-                            features_value = [0, 1]
-                        else:
-                            features_value = [1, 0]
                         query += chr(j+65)
                     else:
                         query += column
@@ -62,7 +56,6 @@ def generateQueries(rule, arity, resultRecords):
                 query += ")"
 
                 queries.add(query)
-                features[query] = features_value
 
     # Boolean queries
     for record in resultRecords:
@@ -81,7 +74,6 @@ def generateQueries(rule, arity, resultRecords):
                     query += ","
             query += ")"
             queries.add(query)
-            features[query] = [1, 1]
 
     queriesList = list(queries)
     shuffle(queriesList)
@@ -127,14 +119,14 @@ def generateQueries(rule, arity, resultRecords):
             else:
                 winnerAlgorithm = 0 #"MagicSets"
 
-            allFeatures = features[q]
+            allFeatures = []
             for v in vector:
                 allFeatures.append(v)
             #allFeatures.append(numResults)
             allFeatures.append(winnerAlgorithm)
 
             record = ""
-            if len(allFeatures) > 5 + len(features[q]) + 2:
+            if len(allFeatures) > 7:
                 errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
                 sys.stderr.write(errstr)
             for i, a in enumerate(allFeatures):
