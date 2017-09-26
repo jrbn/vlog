@@ -391,21 +391,37 @@ void generateTrainingQueries(int argc,
         std::string pathRules) {
     //Load a program with all the rules
     Program p(db.getNTerms(), &db);
+    uint8_t vt1 = (uint8_t) p.getIDVar("V1");
+    uint8_t vt2 = (uint8_t) p.getIDVar("V2");
+    uint8_t vt3 = (uint8_t) p.getIDVar("V3");
+    uint8_t vt4 = (uint8_t) p.getIDVar("V4");
+    std::vector<uint8_t> vt;
+    vt.push_back(vt1);
+    vt.push_back(vt2);
+    vt.push_back(vt3);
+    vt.push_back(vt4);
     p.readFromFile(pathRules);
 
     std::vector<Rule> rules = p.getAllRules();
     for (int i = 0; i < rules.size(); ++i) {
         Rule ri = rules[i];
         Predicate ph = ri.getHead().getPredicate();
-        // Calculate sigma_h
-        // Get the canonical variables
-        //std::cout << i+1 << ")" << ph.getId() << " : ";
+        std::vector<Substitution> sigmaH;
+        for (int j = 0; j < ph.getCardinality(); ++j) {
+            VTerm dest = ri.getHead().getTuple().get(j);
+            sigmaH.push_back(Substitution(vt[j], dest));
+        }
         std::cout << ri.toprettystring(&p, &db) << std::endl;
         std::vector<Literal> body = ri.getBody();
         for (std::vector<Literal>::const_iterator itr = body.begin(); itr != body.end(); ++itr) {
             Predicate pb = itr->getPredicate();
-            //std::cout << pb.getId() << ",";
-            // calculate sigma_b
+            std::vector<Substitution> sigmaB;
+            for (int j = 0; j < pb.getCardinality(); ++j) {
+                VTerm dest = ri.getHead().getTuple().get(j);
+                sigmaB.push_back(Substitution(vt[j], dest));
+            }
+            // Calculate sigmaB * sigmaH
+            reverse_concat(sigmaB, sigmaH);
         }
         std::cout << std::endl;
     }

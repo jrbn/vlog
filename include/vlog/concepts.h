@@ -201,6 +201,8 @@ struct Substitution {
     Substitution(uint8_t origin, VTerm destination) : origin(origin), destination(destination) {}
 };
 
+std::vector<Substitution> concat(std::vector<Substitution>, std::vector<Substitution>);
+std::vector<Substitution> reverse_concat(std::vector<Substitution>, std::vector<Substitution>);
 /*** LITERALS ***/
 class Program;
 class Literal {
