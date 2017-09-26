@@ -85,6 +85,7 @@ void printHelp(const char *programName, po::options_description &desc) {
     cout << "queryLiteral\t\t execute a Literal query." << endl;
     cout << "server\t\t starts in server mode." << endl;
     cout << "load\t\t load a Trident KB." << endl;
+    cout << "test\t\t test rule based learning." << endl;
     cout << "lookup\t\t lookup for values in the dictionary." << endl << endl;
 
     cout << desc << endl;
@@ -108,7 +109,7 @@ bool checkParams(po::variables_map &vm, int argc, const char** argv,
     }
 
     if (cmd != "help" && cmd != "query" && cmd != "lookup" && cmd != "load" && cmd != "queryLiteral"
-            && cmd != "mat" && cmd != "rulesgraph" && cmd != "server") {
+            && cmd != "mat" && cmd != "rulesgraph" && cmd != "server" && cmd != "test") {
         printErrorMsg(
                 (string("The command \"") + cmd + string("\" is unknown.")).c_str());
         return false;
@@ -201,7 +202,7 @@ bool checkParams(po::variables_map &vm, int argc, const char** argv,
                 return false;
             }
 
-        } else if (cmd == "mat") {
+        } else if (cmd == "mat" || cmd == "test") {
             string path = vm["rules"].as<string>();
             if (path != "" && !fs::exists(path)) {
                 printErrorMsg((string("The rule file '") +
@@ -296,6 +297,10 @@ bool initParams(int argc, const char** argv, po::variables_map &vm) {
             "Textual term to search")("number,n", po::value<long>(),
                 "Numeric term to search");
 
+    po::options_description test_options("Options for <test>");
+    test_options.add_options()("maxTuples", po::value<unsigned int>()->default_value(100), "Sets the number of tuples to choose from database for an EDB predicate.");
+    test_options.add_options()("depth", po::value<unsigned int>()->default_value(10), "Sets the depth for graph traversal when generating queries.");
+
     po::options_description cmdline_options("Parameters");
     cmdline_options.add(query_options).add(lookup_options).add(load_options);
     cmdline_options.add_options()("logLevel,l", po::value<logging::trivial::severity_level>(),
@@ -378,6 +383,32 @@ void startServer(int argc,
     webint->start("0.0.0.0", to_string(port));
     BOOST_LOG_TRIVIAL(info) << "Server is launched at 0.0.0.0:" << to_string(port);
     webint->join();
+}
+void generateTrainingQueries(int argc,
+        const char** argv,
+        EDBLayer &db,
+        po::variables_map &vm,
+        std::string pathRules) {
+    //Load a program with all the rules
+    Program p(db.getNTerms(), &db);
+    p.readFromFile(pathRules);
+
+    std::vector<Rule> rules = p.getAllRules();
+    for (int i = 0; i < rules.size(); ++i) {
+        Rule ri = rules[i];
+        Predicate ph = ri.getHead().getPredicate();
+        // Calculate sigma_h
+        // Get the canonical variables
+        //std::cout << i+1 << ")" << ph.getId() << " : ";
+        std::cout << ri.toprettystring(&p, &db) << std::endl;
+        std::vector<Literal> body = ri.getBody();
+        for (std::vector<Literal>::const_iterator itr = body.begin(); itr != body.end(); ++itr) {
+            Predicate pb = itr->getPredicate();
+            //std::cout << pb.getId() << ",";
+            // calculate sigma_b
+        }
+        std::cout << std::endl;
+    }
 }
 
 void launchFullMat(int argc,
@@ -939,6 +970,13 @@ int main(int argc, const char** argv) {
         EDBLayer *layer = new EDBLayer(conf, false);
         writeRuleDependencyGraph(*layer, vm["rules"].as<string>(),
                 vm["graphfile"].as<string>());
+        delete layer;
+    } else if (cmd == "test") {
+        EDBConf conf(edbFile);
+        EDBLayer *layer = new EDBLayer(conf, false);
+        generateTrainingQueries(argc, argv, *layer, vm,
+                vm["rules"].as<string>());
+        // TODO: Call function to generate queries and test
         delete layer;
     } else if (cmd == "load") {
         Loader *loader = new Loader();
