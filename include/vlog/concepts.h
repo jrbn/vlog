@@ -155,7 +155,7 @@ public:
         return (type >> 1) != 0;
     }
 
-    uint8_t getAdorment() const {
+    uint8_t getAdornment() const {
         return adornment;
     }
 
@@ -233,7 +233,7 @@ public:
     }
 
     size_t getNBoundVariables() const {
-        return pred.getNFields(pred.getAdorment());
+        return pred.getNFields(pred.getAdornment());
     }
 
     static int mgu(Substitution *substitutions, const Literal &l, const Literal &m);
@@ -420,6 +420,10 @@ public:
     bool isPredicateIDB(const PredId_t id);
 
     std::string getAllPredicates();
+
+    std::vector<std::string> getAllPredicateStrings();
+
+    std::vector<uint8_t> getAllPredicateIds();
 
     int getNEDBPredicates();
 

@@ -96,7 +96,7 @@ std::string Literal::tostring(Program *program, EDBLayer *db) const {
 
     std::string out = predName + std::string("[") +
                       std::to_string(pred.getType()) + std::string("]") +
-                      adornmentToString(pred.getAdorment(), tuple.getSize()) + std::string("(");
+                      adornmentToString(pred.getAdornment(), tuple.getSize()) + std::string("(");
 
     for (int i = 0; i < tuple.getSize(); ++i) {
         if (tuple.get(i).isVariable()) {
@@ -980,6 +980,19 @@ Predicate Program::getPredicate(std::string & p, uint8_t adornment) {
 
 std::string Program::getAllPredicates() {
     return dictPredicates.tostring();
+}
+
+std::vector<std::string> Program::getAllPredicateStrings() {
+    return dictPredicates.getKeys();
+}
+
+std::vector<uint8_t> Program::getAllPredicateIds() {
+    std::vector<uint8_t> output;
+    std::vector<std::string> predicateStrings = this->getAllPredicateStrings();
+    for (int i = 0; i < predicateStrings.size(); ++i) {
+        output.push_back(this->getPredicate(predicateStrings[i]).getId());
+    }
+    return output;
 }
 
 std::string Program::tostring() {

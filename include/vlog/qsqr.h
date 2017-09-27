@@ -112,7 +112,7 @@ public:
     BindingsTable *getAnswerTable(const Predicate pred, uint8_t adornment);
 
     BindingsTable *getAnswerTable(const Literal *literal) {
-        return getAnswerTable(literal->getPredicate(), literal->getPredicate().getAdorment());
+        return getAnswerTable(literal->getPredicate(), literal->getPredicate().getAdornment());
     }
 
     void estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Rule> &execRules);

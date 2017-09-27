@@ -12,7 +12,7 @@ std::shared_ptr<Program> Wizard::getAdornedProgram(Literal &query, Program &prog
     std::vector<Literal> queries;
     int idxQueries = 0;
     queries.push_back(query);
-    Term_t key = (query.getPredicate().getId() << 16) + query.getPredicate().getAdorment();
+    Term_t key = (query.getPredicate().getId() << 16) + query.getPredicate().getAdornment();
     setQueries.insert(key);
 
     while (idxQueries < queries.size()) {
@@ -22,7 +22,7 @@ std::shared_ptr<Program> Wizard::getAdornedProgram(Literal &query, Program &prog
         std::vector<Rule> *r = program.getAllRulesByPredicate(lit.getPredicate().getId());
         for (std::vector<Rule>::iterator itr = r->begin(); itr != r->end();
                 ++itr) {
-            rules.push_back(itr->createAdornment(lit.getPredicate().getAdorment()));
+            rules.push_back(itr->createAdornment(lit.getPredicate().getAdornment()));
         }
 
         //Go through all the new rules and get new queries to process
@@ -32,7 +32,7 @@ std::shared_ptr<Program> Wizard::getAdornedProgram(Literal &query, Program &prog
                     itr != r->getBody().end(); ++itr) {
                 Predicate pred = itr->getPredicate();
                 if (pred.getType() == IDB) {
-                    Term_t key = (pred.getId() << 16) + pred.getAdorment();
+                    Term_t key = (pred.getId() << 16) + pred.getAdornment();
                     if (setQueries.find(key) == setQueries.end()) {
                         setQueries.insert(key);
                         queries.push_back(*itr);
@@ -55,7 +55,7 @@ std::shared_ptr<Program> Wizard::getAdornedProgram(Literal &query, Program &prog
 
 Literal Wizard::getMagicRelation(const bool hasPriority, std::shared_ptr<Program> newProgram, const Literal &head) {
     const PredId_t pred = head.getPredicate().getId();
-    const uint8_t adornment = head.getPredicate().getAdorment();
+    const uint8_t adornment = head.getPredicate().getAdornment();
 
     //new predicate
     std::string newPred = "MAGICI_" + to_string(pred) + "_" + to_string(adornment);
@@ -99,7 +99,7 @@ std::shared_ptr<Program> Wizard::doMagic(const Literal &query,
         Literal magicLiteral = getMagicRelation(true, newProgram, head);
 
         if (head.getPredicate().getId() == query.getPredicate().getId() &&
-                head.getPredicate().getAdorment() == query.getPredicate().getAdorment()) {
+                head.getPredicate().getAdornment() == query.getPredicate().getAdornment()) {
             inputOutputRelIDs.first = magicLiteral.getPredicate().getId();
             foundPredicate = true;
         }
@@ -147,7 +147,7 @@ std::shared_ptr<Program> Wizard::doMagic(const Literal &query,
 
                 if (newBody.size() == 1 && newBody[0].getPredicate().getId() == newHead.getPredicate().getId() &&
                         newBody[0].getPredicate().getType() == newHead.getPredicate().getType() &&
-                        newBody[0].getPredicate().getAdorment() == newHead.getPredicate().getAdorment()) {
+                        newBody[0].getPredicate().getAdornment() == newHead.getPredicate().getAdornment()) {
                 } else {
 		    Rule r(newHead, newBody);
 		    Rule normalized_r(r.normalizeVars());

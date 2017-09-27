@@ -402,6 +402,10 @@ void generateTrainingQueries(int argc,
     vt.push_back(vt4);
     p.readFromFile(pathRules);
 
+    typedef std::pair<Predicate, vector<Substitution>> EndpointWithEdge;
+    typedef std::unordered_map<uint8_t, std::vector<EndpointWithEdge>> Graph;
+    Graph graph;
+
     std::vector<Rule> rules = p.getAllRules();
     for (int i = 0; i < rules.size(); ++i) {
         Rule ri = rules[i];
@@ -411,7 +415,7 @@ void generateTrainingQueries(int argc,
             VTerm dest = ri.getHead().getTuple().get(j);
             sigmaH.push_back(Substitution(vt[j], dest));
         }
-        std::cout << ri.toprettystring(&p, &db) << std::endl;
+        //std::cout << ri.toprettystring(&p, &db) << std::endl;
         std::vector<Literal> body = ri.getBody();
         for (std::vector<Literal>::const_iterator itr = body.begin(); itr != body.end(); ++itr) {
             Predicate pb = itr->getPredicate();
@@ -422,8 +426,22 @@ void generateTrainingQueries(int argc,
             }
             // Calculate sigmaB * sigmaH
             std::vector<Substitution> edge_label = inverse_concat(sigmaB, sigmaH);
+            EndpointWithEdge neighbour = std::make_pair(pb, edge_label);
+            graph[pb.getId()].push_back(neighbour);
         }
-        std::cout << std::endl;
+        //std::cout << std::endl;
+    }
+
+    // Gather all predicates
+    std::vector<uint8_t> ids = p.getAllPredicateIds();
+
+    for (int i = 0; i < ids.size(); ++i) {
+        int neighbours = graph[ids[i]].size();
+        if (p.isPredicateIDB(ids[i])) {
+            std::cout << p.getPredicateName(ids[i]) << " is IDB : " << neighbours << "neighbours" <<  endl;
+        } else {
+            std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
+        }
     }
 }
 

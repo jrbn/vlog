@@ -69,6 +69,22 @@ public:
         return output;
     }
 
+    std::vector<std::string> getKeys() {
+        std::vector<std::string> output;
+        for (SimpleHashmap::iterator itr = map.begin(); itr != map.end(); ++itr) {
+            output.push_back(itr->first);
+        }
+        return output;
+    }
+
+    std::vector<Term_t> getValues() {
+        std::vector<Term_t> output;
+        for (SimpleHashmap::iterator itr = map.begin(); itr != map.end(); ++itr) {
+            output.push_back(itr->second);
+        }
+        return output;
+    }
+
     size_t size() {
         return map.size();
     }
