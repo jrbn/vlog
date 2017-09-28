@@ -302,7 +302,7 @@ bool initParams(int argc, const char** argv, po::variables_map &vm) {
     test_options.add_options()("depth", po::value<unsigned int>()->default_value(10), "Sets the depth for graph traversal when generating queries.");
 
     po::options_description cmdline_options("Parameters");
-    cmdline_options.add(query_options).add(lookup_options).add(load_options);
+    cmdline_options.add(query_options).add(lookup_options).add(load_options).add(test_options);
     cmdline_options.add_options()("logLevel,l", po::value<logging::trivial::severity_level>(),
             "Set the log level (accepted values: trace, debug, info, warning, error, fatal). Default is info.");
 
@@ -384,6 +384,21 @@ void startServer(int argc,
     BOOST_LOG_TRIVIAL(info) << "Server is launched at 0.0.0.0:" << to_string(port);
     webint->join();
 }
+
+std::string makeGenericQuery(Program& p, Predicate& pred) {
+    std::string query = p.getPredicateName(pred.getId());
+    int card = pred.getCardinality();
+    query += "(";
+    for (int i = 0; i < card; ++i) {
+        query += (char) (i+65);
+        if (i != card-1) {
+            query += ",";
+        }
+    }
+    query += ")";
+    return query;
+}
+
 void generateTrainingQueries(int argc,
         const char** argv,
         EDBLayer &db,
@@ -437,10 +452,32 @@ void generateTrainingQueries(int argc,
 
     for (int i = 0; i < ids.size(); ++i) {
         int neighbours = graph[ids[i]].size();
-        if (p.isPredicateIDB(ids[i])) {
-            std::cout << p.getPredicateName(ids[i]) << " is IDB : " << neighbours << "neighbours" <<  endl;
-        } else {
+        if (!p.isPredicateIDB(ids[i])) {
             std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
+            Predicate edbPred = p.getPredicate(ids[i]);
+            std::string query = makeGenericQuery(p, edbPred);
+            Literal literal = p.parseLiteral(query);
+            Reasoner reasoner(vm["reasoningThreshold"].as<long>());
+            int nVars = literal.getNVars();
+            bool onlyVars = nVars > 0;
+	        TupleIterator *iter;
+	        iter = reasoner.getEDBIterator(literal, NULL, NULL, db, onlyVars, NULL);
+            int sz = iter->getTupleSize();
+            int i = 0;
+            while(iter->hasNext() && i < vm["maxTuples"].as<unsigned int>()) {
+                iter->next();
+                for (int j = 0; j < sz; ++j) {
+                    char supportText[MAX_TERM_SIZE];
+                    uint64_t value = iter->getElementAt(j);
+                    db.getDictText(value, supportText);
+                    std::cout << supportText;
+                    if (j != 0) {
+                        std::cout << " ";
+                    }
+                }
+                std::cout << std::endl;
+                i++;
+            }
         }
     }
 }
