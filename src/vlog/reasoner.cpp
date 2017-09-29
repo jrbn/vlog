@@ -16,6 +16,7 @@
 
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 long cmpRow(std::vector<uint8_t> *posJoins, const Term_t *row1, const uint64_t *row2) {
     for (int i = 0; i < posJoins->size(); ++i) {
@@ -836,6 +837,31 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
         " with magic or QSQR. Estimated cost: " <<
         cost << " threshold for QSQ-R is " << threshold;
     return mode;
+}
+
+std::vector<std::vector<uint64_t>> Reasoner::getRandomEDBTuples(Literal &query, EDBLayer& edb, uint64_t maxTuples) {
+    std::vector<std::vector<uint64_t>> output;
+    QSQQuery qsqquery(query);
+    int nVars = query.getNVars();
+    TupleTable *table = new TupleTable(nVars);
+    edb.query(&qsqquery, table, NULL, NULL);
+    uint64_t nRows = table->getNRows();
+    vector<uint64_t> rowNumbers(maxTuples);
+    for (int i = 0; i < maxTuples; ++i) {
+        uint64_t rowNumber = (rand() % nRows);
+        std::vector<uint64_t> tuple;
+        std::cout << rowNumber << " : ";
+        for (int j = 0; j < nVars; ++j) {
+            char supportText[MAX_TERM_SIZE];
+            uint64_t value = table->getPosAtRow(rowNumber, j);
+            tuple.push_back(value);
+            edb.getDictText(value, supportText);
+            std::cout << supportText << " ";
+        }
+        output.push_back(tuple);
+        std::cout << std::endl;
+    }
+    return output;
 }
 
 TupleIterator *Reasoner::getEDBIterator(Literal &query,

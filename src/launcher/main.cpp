@@ -390,7 +390,7 @@ std::string makeGenericQuery(Program& p, Predicate& pred) {
     int card = pred.getCardinality();
     query += "(";
     for (int i = 0; i < card; ++i) {
-        query += (char) (i+65);
+        query += "V" + to_string(i+1);
         if (i != card-1) {
             query += ",";
         }
@@ -399,11 +399,56 @@ std::string makeGenericQuery(Program& p, Predicate& pred) {
     return query;
 }
 
+std::string makeComplexQuery(Program& p, Literal& l, vector<Substitution>& sub, EDBLayer& db) {
+    std::string query = p.getPredicateName(l.getPredicate().getId());
+    int card = l.getPredicate().getCardinality();
+    query += "(";
+    for (int i = 0; i < card; ++i) {
+        std::string canV = "V" + to_string(i+1);
+        uint8_t id = p.getIDVar(canV);
+        bool found = false;
+        for (int j = 0; j < sub.size(); ++j) {
+            if (sub[j].origin == id) {
+                char supportText[MAX_TERM_SIZE];
+                db.getDictText(sub[j].destination.getValue(), supportText);
+                query += supportText;
+                found = true;
+            }
+        }
+        if (!found) {
+            query += canV;
+        }
+        if (i != card-1) {
+            query += ",";
+        }
+    }
+    query += ")";
+    return query;
+}
+
+template <typename Generic>
+std::vector<std::vector<Generic>> powerset(std::vector<Generic>& set) {
+    std::vector<std::vector<Generic>> output;
+    uint16_t setSize = set.size();
+    uint16_t powersetSize = pow(2, setSize) - 1;
+    for (int i = 1; i <= powersetSize; ++i) {
+        std::vector<Generic> element;
+        for (int j = 0; j < setSize; ++j) {
+            if (i & (1<<j)) {
+                element.push_back(set[j]);
+            }
+        }
+        output.push_back(element);
+    }
+    return output;
+}
+
 void generateTrainingQueries(int argc,
         const char** argv,
         EDBLayer &db,
         po::variables_map &vm,
         std::string pathRules) {
+    std::vector<string> allQueries;
     //Load a program with all the rules
     Program p(db.getNTerms(), &db);
     uint8_t vt1 = (uint8_t) p.getIDVar("V1");
@@ -455,31 +500,52 @@ void generateTrainingQueries(int argc,
         if (!p.isPredicateIDB(ids[i])) {
             std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
             Predicate edbPred = p.getPredicate(ids[i]);
+            int card = edbPred.getCardinality();
             std::string query = makeGenericQuery(p, edbPred);
             Literal literal = p.parseLiteral(query);
             Reasoner reasoner(vm["reasoningThreshold"].as<long>());
             int nVars = literal.getNVars();
-            bool onlyVars = nVars > 0;
-	        TupleIterator *iter;
-	        iter = reasoner.getEDBIterator(literal, NULL, NULL, db, onlyVars, NULL);
-            int sz = iter->getTupleSize();
-            int i = 0;
-            while(iter->hasNext() && i < vm["maxTuples"].as<unsigned int>()) {
-                iter->next();
-                for (int j = 0; j < sz; ++j) {
-                    char supportText[MAX_TERM_SIZE];
-                    uint64_t value = iter->getElementAt(j);
-                    db.getDictText(value, supportText);
-                    std::cout << supportText;
-                    if (j != 0) {
-                        std::cout << " ";
+            std::vector<std::vector<uint64_t>> output;
+            uint64_t maxTuples = vm["maxTuples"].as<unsigned int>();
+            output = reasoner.getRandomEDBTuples(literal, db, maxTuples);
+            for (int j = 0; j < output.size(); ++j) {
+                vector<Substitution> subs;
+                for (int k = 0; k < card; ++k) {
+                    subs.push_back(Substitution(vt[k], VTerm(0, output[j][k])));
+                }
+
+                // Find powerset of subs here
+                std::vector<std::vector<Substitution>> options =  powerset<Substitution>(subs);
+                for (int l = 0; l < options.size(); ++l) {
+                    // options[l] is a set of substitutions
+                    // Working variables
+                    int n = vm["depth"].as<unsigned int>();
+                    vector<Substitution> sigma = options[l];
+                    Predicate pred(edbPred);
+                    while (n != 0) {
+                        // Choose a random arc
+                        uint32_t randomNeighbour = rand() % graph[pred.getId()].size();
+                        std::vector<Substitution> sigmaN = graph[pred.getId()][randomNeighbour].second;
+                        std::vector<Substitution> result = concat(sigmaN, sigma);
+                        Predicate q (graph[pred.getId()][randomNeighbour].first);
+                        std::string qQuery = makeGenericQuery(p, q);
+                        Literal qLiteral = p.parseLiteral(qQuery);
+                        std::string qFinalQuery = makeComplexQuery(p, qLiteral, result, db);
+                        allQueries.push_back(qFinalQuery);
+
+                        Predicate pred(q);
+                        sigma = result;
+                        --n;
                     }
                 }
-                std::cout << std::endl;
-                i++;
             }
         }
     }
+
+    for (int i = 0; i < allQueries.size(); ++i) {
+        std::cout << allQueries[i] << std::endl;
+    }
+    //return allQueries;
 }
 
 void launchFullMat(int argc,

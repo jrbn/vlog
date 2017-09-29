@@ -100,6 +100,7 @@ public:
             EDBLayer &layer,
             bool returnOnlyVars,
             std::vector<uint8_t> *sortByFields);
+    std::vector<std::vector<uint64_t>> getRandomEDBTuples(Literal &query, EDBLayer& edb, uint64_t maxTuples);
 
     TupleIterator *getMagicIterator(Literal &query,
                                            std::vector<uint8_t> * posJoins,
