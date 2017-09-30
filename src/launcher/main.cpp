@@ -385,13 +385,12 @@ void startServer(int argc,
     webint->join();
 }
 
-std::string makeGenericQuery(Program& p, Predicate& pred) {
-    std::string query = p.getPredicateName(pred.getId());
-    int card = pred.getCardinality();
+std::string makeGenericQuery(Program& p, PredId_t predId, uint8_t predCard) {
+    std::string query = p.getPredicateName(predId);
     query += "(";
-    for (int i = 0; i < card; ++i) {
+    for (int i = 0; i < predCard; ++i) {
         query += "V" + to_string(i+1);
-        if (i != card-1) {
+        if (i != predCard-1) {
             query += ",";
         }
     }
@@ -463,7 +462,7 @@ void generateTrainingQueries(int argc,
     p.readFromFile(pathRules);
 
     typedef std::pair<Predicate, vector<Substitution>> EndpointWithEdge;
-    typedef std::unordered_map<uint8_t, std::vector<EndpointWithEdge>> Graph;
+    typedef std::unordered_map<uint16_t, std::vector<EndpointWithEdge>> Graph;
     Graph graph;
 
     std::vector<Rule> rules = p.getAllRules();
@@ -486,10 +485,26 @@ void generateTrainingQueries(int argc,
             }
             // Calculate sigmaB * sigmaH
             std::vector<Substitution> edge_label = inverse_concat(sigmaB, sigmaH);
-            EndpointWithEdge neighbour = std::make_pair(pb, edge_label);
+            EndpointWithEdge neighbour = std::make_pair(ph, edge_label);
             graph[pb.getId()].push_back(neighbour);
         }
         //std::cout << std::endl;
+    }
+
+    // Try printing graph
+    for (auto it = graph.begin(); it != graph.end(); ++it) {
+        uint16_t id = it->first;
+        std::cout << p.getPredicateName(id) << " : " << std::endl;
+        std::vector<EndpointWithEdge> nei = it->second;
+        for (int i = 0; i < nei.size(); ++i) {
+            Predicate pred = nei[i].first;
+            std::vector<Substitution> sub = nei[i].second;
+            for (int j = 0; j < sub.size(); ++j){
+                std::cout << p.getPredicateName(nei[i].first.getId()) << "{" << sub[j].origin << "->"
+                << sub[j].destination.getId() << " , " << sub[j].destination.getValue() << "}" << std::endl;
+            }
+        }
+        std::cout << "=====" << std::endl;
     }
 
     // Gather all predicates
@@ -501,7 +516,7 @@ void generateTrainingQueries(int argc,
             std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
             Predicate edbPred = p.getPredicate(ids[i]);
             int card = edbPred.getCardinality();
-            std::string query = makeGenericQuery(p, edbPred);
+            std::string query = makeGenericQuery(p, edbPred.getId(), edbPred.getCardinality());
             Literal literal = p.parseLiteral(query);
             Reasoner reasoner(vm["reasoningThreshold"].as<long>());
             int nVars = literal.getNVars();
@@ -521,19 +536,24 @@ void generateTrainingQueries(int argc,
                     // Working variables
                     int n = vm["depth"].as<unsigned int>();
                     vector<Substitution> sigma = options[l];
-                    Predicate pred(edbPred);
+                    PredId_t predId = edbPred.getId();
                     while (n != 0) {
                         // Choose a random arc
-                        uint32_t randomNeighbour = rand() % graph[pred.getId()].size();
-                        std::vector<Substitution> sigmaN = graph[pred.getId()][randomNeighbour].second;
+                        uint32_t nNeighbours = graph[predId].size();
+                        if (!nNeighbours) {
+                            break;
+                        }
+                        uint32_t randomNeighbour = rand() % nNeighbours;
+                        std::vector<Substitution> sigmaN = graph[predId][randomNeighbour].second;
                         std::vector<Substitution> result = concat(sigmaN, sigma);
-                        Predicate q (graph[pred.getId()][randomNeighbour].first);
-                        std::string qQuery = makeGenericQuery(p, q);
+                        PredId_t qId  = graph[predId][randomNeighbour].first.getId();
+                        uint8_t qCard = graph[predId][randomNeighbour].first.getCardinality();
+                        std::string qQuery = makeGenericQuery(p, qId, qCard);
                         Literal qLiteral = p.parseLiteral(qQuery);
                         std::string qFinalQuery = makeComplexQuery(p, qLiteral, result, db);
                         allQueries.push_back(qFinalQuery);
 
-                        Predicate pred(q);
+                        predId = qId;
                         sigma = result;
                         --n;
                     }

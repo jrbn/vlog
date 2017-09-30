@@ -1012,7 +1012,11 @@ std::vector<Substitution> concat(std::vector<Substitution>& sigma1, std::vector<
     for (std::vector<Substitution>::iterator itr1 = sigma1.begin(); itr1 != sigma1.end(); ++itr1) {
         for (std::vector<Substitution>::iterator itr2 = sigma2.begin(); itr2 != sigma2.end(); ++itr2) {
             if (itr1->origin == itr2->origin) {
-                result.push_back(Substitution(itr1->destination.getId(), VTerm(itr2->destination.getId(), 0)));
+                if (itr2->destination.isVariable()){
+                    result.push_back(Substitution(itr1->destination.getId(), VTerm(itr2->destination.getId(), 0)));
+                } else {
+                    result.push_back(Substitution(itr1->destination.getId(), VTerm(0, itr2->destination.getValue())));
+                }
             }
         }
     }
