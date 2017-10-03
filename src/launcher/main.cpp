@@ -51,7 +51,8 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
-#include <signal.h>
+#include <csignal>
+#include <csetjmp>
 
 using namespace std;
 namespace timens = boost::chrono;
@@ -442,24 +443,14 @@ std::vector<std::vector<Generic>> powerset(std::vector<Generic>& set) {
     return output;
 }
 
-void generateTrainingQueries(int argc,
+std::vector<std::string> generateTrainingQueries(int argc,
         const char** argv,
         EDBLayer &db,
-        po::variables_map &vm,
-        std::string pathRules) {
+        Program &p,
+        std::vector<uint8_t>& vt,
+        po::variables_map &vm
+        ) {
     std::vector<string> allQueries;
-    //Load a program with all the rules
-    Program p(db.getNTerms(), &db);
-    uint8_t vt1 = (uint8_t) p.getIDVar("V1");
-    uint8_t vt2 = (uint8_t) p.getIDVar("V2");
-    uint8_t vt3 = (uint8_t) p.getIDVar("V3");
-    uint8_t vt4 = (uint8_t) p.getIDVar("V4");
-    std::vector<uint8_t> vt;
-    vt.push_back(vt1);
-    vt.push_back(vt2);
-    vt.push_back(vt3);
-    vt.push_back(vt4);
-    p.readFromFile(pathRules);
 
     typedef std::pair<Predicate, vector<Substitution>> EndpointWithEdge;
     typedef std::unordered_map<uint16_t, std::vector<EndpointWithEdge>> Graph;
@@ -474,7 +465,6 @@ void generateTrainingQueries(int argc,
             VTerm dest = ri.getHead().getTuple().get(j);
             sigmaH.push_back(Substitution(vt[j], dest));
         }
-        //std::cout << ri.toprettystring(&p, &db) << std::endl;
         std::vector<Literal> body = ri.getBody();
         for (std::vector<Literal>::const_iterator itr = body.begin(); itr != body.end(); ++itr) {
             Predicate pb = itr->getPredicate();
@@ -488,9 +478,9 @@ void generateTrainingQueries(int argc,
             EndpointWithEdge neighbour = std::make_pair(ph, edge_label);
             graph[pb.getId()].push_back(neighbour);
         }
-        //std::cout << std::endl;
     }
 
+    #if DEBUG
     // Try printing graph
     for (auto it = graph.begin(); it != graph.end(); ++it) {
         uint16_t id = it->first;
@@ -506,6 +496,7 @@ void generateTrainingQueries(int argc,
         }
         std::cout << "=====" << std::endl;
     }
+    #endif
 
     // Gather all predicates
     std::vector<uint8_t> ids = p.getAllPredicateIds();
@@ -513,7 +504,7 @@ void generateTrainingQueries(int argc,
     for (int i = 0; i < ids.size(); ++i) {
         int neighbours = graph[ids[i]].size();
         if (!p.isPredicateIDB(ids[i])) {
-            std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
+            //std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
             Predicate edbPred = p.getPredicate(ids[i]);
             int card = edbPred.getCardinality();
             std::string query = makeGenericQuery(p, edbPred.getId(), edbPred.getCardinality());
@@ -562,10 +553,12 @@ void generateTrainingQueries(int argc,
         }
     }
 
-    for (int i = 0; i < allQueries.size(); ++i) {
+    int i;
+    for (i = 0; i < allQueries.size(); ++i) {
         std::cout << allQueries[i] << std::endl;
     }
-    //return allQueries;
+    std::cout << i << " queries generated." << std::endl;
+    return allQueries;
 }
 
 void launchFullMat(int argc,
@@ -836,10 +829,13 @@ cout.rdbuf(strm_buffer);
 }*/
 }
 
-void alarmHandler(int signal) {
+jmp_buf gBuffer;
+
+void alarmHandler(int signalNumber) {
     BOOST_LOG_TRIVIAL(info) << "Got alarm signal";
     // Throw something that is otherwise unused.
-    throw true;
+    signal(SIGALRM, alarmHandler);
+    longjmp(gBuffer, signalNumber);
 }
 
 string selectStrategy(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reasoner, po::variables_map &vm) {
@@ -870,79 +866,89 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
         if (signal(SIGALRM, alarmHandler) == SIG_ERR) {
 	    BOOST_LOG_TRIVIAL(info) << "Could not set timeout";
 	} else {
-	    BOOST_LOG_TRIVIAL(debug) << "Installed alarm signal handler; Now setting alarm over " << timeout << " sec";
-	    ualarm((useconds_t)(timeout * 1000000), (useconds_t)(timeout * 1000000)); //Wait timeout seconds
+	    BOOST_LOG_TRIVIAL(info) << "Installed alarm signal handler; Now setting alarm over " << timeout << " sec";
+        // ualarm does not work for timeouts more than 1 second because
+        // The type useconds_t is an unsigned integer type capable of holding integers in the range [0,1000000]
+	    //ualarm((useconds_t)(timeout * 1000000), (useconds_t)(timeout * 1000000)); //Wait timeout seconds
+        alarm(timeout);
 	}
     }
 
+    int sig;
     try {
-	TupleIterator *iter;
+    if ((sig = setjmp(gBuffer)) == 0) {
+        TupleIterator *iter;
 
-	if (algo == "edb") {
-	    iter = reasoner.getEDBIterator(literal, NULL, NULL, edb, onlyVars, NULL);
-	} else if (algo == "magic") {
-	    iter = reasoner.getMagicIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
-	} else if (algo == "qsqr") {
-	    iter = reasoner.getTopDownIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
-	} else if (algo == "mat") {
-	    iter = reasoner.getMaterializationIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
-	} else {
-	    BOOST_LOG_TRIVIAL(error) << "Unrecognized reasoning algorithm: " << algo;
-	    throw 10;
-	}
+        if (algo == "edb") {
+            iter = reasoner.getEDBIterator(literal, NULL, NULL, edb, onlyVars, NULL);
+        } else if (algo == "magic") {
+            iter = reasoner.getMagicIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
+        } else if (algo == "qsqr") {
+            iter = reasoner.getTopDownIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
+        } else if (algo == "mat") {
+            iter = reasoner.getMaterializationIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
+        } else {
+            BOOST_LOG_TRIVIAL(error) << "Unrecognized reasoning algorithm: " << algo;
+            throw 10;
+        }
 
-	long count = 0;
-	int sz = iter->getTupleSize();
-	if (nVars == 0) {
-	    cout << (iter->hasNext() ? "TRUE" : "FALSE") << endl;
-	    count = (iter->hasNext() ? 1 : 0);
-	} else {
-	    while (iter->hasNext()) {
-		iter->next();
-		count++;
-		if (printResults) {
-		    for (int i = 0; i < sz; i++) {
-			char supportText[MAX_TERM_SIZE];
-			uint64_t value = iter->getElementAt(i);
-			if (i != 0) {
-			    cout << " ";
-			}
-			if (!edb.getDictText(value, supportText)) {
-			    cerr << "Term " << value << " not found" << endl;
-			    cout << value;
-			} else {
-			    cout << supportText;
-			}
-		    }
-		    cout << endl;
-		}
-	    }
-	}
-	boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
+        long count = 0;
+        int sz = iter->getTupleSize();
+        if (nVars == 0) {
+            cout << (iter->hasNext() ? "TRUE" : "FALSE") << endl;
+            count = (iter->hasNext() ? 1 : 0);
+        } else {
+            while (iter->hasNext()) {
+            iter->next();
+            count++;
+            if (printResults) {
+                for (int i = 0; i < sz; i++) {
+                char supportText[MAX_TERM_SIZE];
+                uint64_t value = iter->getElementAt(i);
+                if (i != 0) {
+                    cout << " ";
+                }
+                if (!edb.getDictText(value, supportText)) {
+                    cerr << "Term " << value << " not found" << endl;
+                    cout << value;
+                } else {
+                    cout << supportText;
+                }
+                }
+                cout << endl;
+            }
+            }
+        }
+        boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
 
-	delete iter;
+        delete iter;
 
-        ualarm((useconds_t) 0, (useconds_t) 0);	// reset alarm
+            BOOST_LOG_TRIVIAL(info) << "Destroying the alarm";
+            ualarm((useconds_t) 0, (useconds_t) 0);	// reset alarm
 
-	if (times > 0) {
-	    // Redirect output
-	    boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
-	    for (int j = 0; j < times; j++) {
-		TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
-		int sz = iter->getTupleSize();
-		while (iter->hasNext()) {
-		    iter->next();
-		}
-	    }
-	    boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
+        if (times > 0) {
+            // Redirect output
+            boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
+            for (int j = 0; j < times; j++) {
+            TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
+            int sz = iter->getTupleSize();
+            while (iter->hasNext()) {
+                iter->next();
+            }
+            }
+            boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
 
-	    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-	    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
-	} else {
-	    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-	}
-	return (durationQ1.count() * 1000);
-    } catch (bool e) {
+            BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
+            BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
+        } else {
+            BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
+        }
+        return (durationQ1.count() * 1000);
+    } else {
+        //throw(sig);
+        throw true;
+    }}
+    catch (bool e) {
 	BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", got timeout";
 	// Reset signal mask so we can do it again ...
 	sigset_t x;
@@ -1131,9 +1137,39 @@ int main(int argc, const char** argv) {
     } else if (cmd == "test") {
         EDBConf conf(edbFile);
         EDBLayer *layer = new EDBLayer(conf, false);
-        generateTrainingQueries(argc, argv, *layer, vm,
-                vm["rules"].as<string>());
-        // TODO: Call function to generate queries and test
+        Program p(layer->getNTerms(), layer);
+        uint8_t vt1 = (uint8_t) p.getIDVar("V1");
+        uint8_t vt2 = (uint8_t) p.getIDVar("V2");
+        uint8_t vt3 = (uint8_t) p.getIDVar("V3");
+        uint8_t vt4 = (uint8_t) p.getIDVar("V4");
+        std::vector<uint8_t> vt;
+        vt.push_back(vt1);
+        vt.push_back(vt2);
+        vt.push_back(vt3);
+        vt.push_back(vt4);
+        p.readFromFile(vm["rules"].as<string>());
+        std::vector<std::string> trainingQueries = generateTrainingQueries(argc, argv, *layer, p, vt, vm);
+        // for every query, call runAlgo and obtain stats including timing
+        int maxDepth = vm["estimationDepth"].as<int>();
+        Reasoner reasoner(vm["reasoningThreshold"].as<long>());
+        int nQueries = trainingQueries.size();
+        for (int i = 0; i < nQueries; ++i) {
+            BOOST_LOG_TRIVIAL(info) << i << "/" << nQueries;
+            std::string query = trainingQueries[i];
+            Literal literal = p.parseLiteral(query);
+            //runAlgo("both", literal, *layer, p, reasoner, vm);
+            Metrics m;
+            reasoner.getMetrics(literal, NULL, NULL, *layer, p, m, maxDepth);
+            //BOOST_LOG_TRIVIAL(info) << "Query: " << query << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
+            double t2 = runAlgo("magic", literal, *layer, p, reasoner, vm);
+            //BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;
+            double t1 = runAlgo("qsqr", literal, *layer, p, reasoner, vm);
+            int winnerAlgo = 0; // magic
+            if (t1 < t2) {
+                winnerAlgo = 1;
+            }
+            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<<winnerAlgo << std::endl;
+        }
         delete layer;
     } else if (cmd == "load") {
         Loader *loader = new Loader();
