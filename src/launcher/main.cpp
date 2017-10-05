@@ -7,7 +7,7 @@
 #include <vlog/webinterface.h>
 #include <vlog/fcinttable.h>
 #include <vlog/exporter.h>
-
+#include <vlog/LogisticRegression.h>
 //Used to load a Trident KB
 #include <launcher/vloglayer.h>
 #include <trident/loader.h>
@@ -450,7 +450,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
         std::vector<uint8_t>& vt,
         po::variables_map &vm
         ) {
-    std::vector<string> allQueries;
+    std::set<string> allQueries;
 
     typedef std::pair<Predicate, vector<Substitution>> EndpointWithEdge;
     typedef std::unordered_map<uint16_t, std::vector<EndpointWithEdge>> Graph;
@@ -542,7 +542,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
                         std::string qQuery = makeGenericQuery(p, qId, qCard);
                         Literal qLiteral = p.parseLiteral(qQuery);
                         std::string qFinalQuery = makeComplexQuery(p, qLiteral, result, db);
-                        allQueries.push_back(qFinalQuery);
+                        allQueries.insert(qFinalQuery);
 
                         predId = qId;
                         sigma = result;
@@ -554,11 +554,13 @@ std::vector<std::string> generateTrainingQueries(int argc,
     }
 
     int i;
-    for (i = 0; i < allQueries.size(); ++i) {
-        std::cout << allQueries[i] << std::endl;
+    std::vector<std::string> queries;
+    for (std::set<std::string>::iterator it = allQueries.begin(); it !=  allQueries.end(); ++it) {
+        queries.push_back(*it);
+        //std::cout << allQueries[i] << std::endl;
     }
     std::cout << i << " queries generated." << std::endl;
-    return allQueries;
+    return queries;
 }
 
 void launchFullMat(int argc,
@@ -870,7 +872,8 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
         // ualarm does not work for timeouts more than 1 second because
         // The type useconds_t is an unsigned integer type capable of holding integers in the range [0,1000000]
 	    //ualarm((useconds_t)(timeout * 1000000), (useconds_t)(timeout * 1000000)); //Wait timeout seconds
-        alarm(timeout);
+        int ret = alarm(timeout);
+        BOOST_LOG_TRIVIAL(info) << "alarm returned " << ret;
 	}
     }
 
@@ -924,7 +927,8 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
         delete iter;
 
             BOOST_LOG_TRIVIAL(info) << "Destroying the alarm";
-            ualarm((useconds_t) 0, (useconds_t) 0);	// reset alarm
+            alarm(0);
+            //ualarm((useconds_t) 0, (useconds_t) 0);	// reset alarm
 
         if (times > 0) {
             // Redirect output
@@ -1153,7 +1157,10 @@ int main(int argc, const char** argv) {
         int maxDepth = vm["estimationDepth"].as<int>();
         Reasoner reasoner(vm["reasoningThreshold"].as<long>());
         int nQueries = trainingQueries.size();
+        vector<Instance> dataset;
         for (int i = 0; i < nQueries; ++i) {
+            vector<int> data;
+            int label;
             BOOST_LOG_TRIVIAL(info) << i << "/" << nQueries;
             std::string query = trainingQueries[i];
             Literal literal = p.parseLiteral(query);
@@ -1168,8 +1175,22 @@ int main(int argc, const char** argv) {
             if (t1 < t2) {
                 winnerAlgo = 1;
             }
-            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<<winnerAlgo << std::endl;
+            if (t1 == t2) {
+                // Don't consider this query for training
+                BOOST_LOG_TRIVIAL(info) << query << " timed out for both algorithms. Skipping..." << endl;
+                continue;
+            }
+            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<< winnerAlgo << std::endl;
+            data.push_back(m.estimate);
+            data.push_back(m.cost);
+            data.push_back(m.countRules);
+            data.push_back(m.countIntermediateQueries);
+            data.push_back(m.countUniqueRules);
+            label = winnerAlgo;
+            Instance instance(label, data);
+            dataset.push_back(instance);
         }
+        // Train with LogisticRegression object' train() method
         delete layer;
     } else if (cmd == "load") {
         Loader *loader = new Loader();

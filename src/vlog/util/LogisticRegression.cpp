@@ -3,7 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include "helper.h"
-#include "LogisticRegression.h"
+#include <vlog/LogisticRegression.h>
 
 using namespace std;
 

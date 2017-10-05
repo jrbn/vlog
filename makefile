@@ -27,7 +27,7 @@ CLIBS = \
 endif
 
 LDFLAGS= \
-	 -llz4 -lcurl \
+	 -llz4 -lcurl -lrt\
 	 -lboost_filesystem -lboost_system -lboost_chrono \
 	 -lboost_thread$(MTSUFF) -lboost_log$(MTSUFF) \
 	 -lboost_log_setup$(MTSUFF) \
@@ -73,7 +73,8 @@ SRC_FILES = \
 	    $(wildcard $(SRCDIR)/vlog/forward/*.cpp) \
 	    $(wildcard $(SRCDIR)/vlog/magic/*.cpp) \
 	    $(wildcard $(SRCDIR)/vlog/web/*.cpp) \
-	    $(wildcard $(SRCDIR)/vlog/trident/*.cpp)
+	    $(wildcard $(SRCDIR)/vlog/trident/*.cpp) \
+		$(wildcard $(SRCDIR)/vlog/util/*.cpp)
 
 #Add also the launcher with the main() file. This file depends on RDF3X (for querying)
 SRC_FILES+= $(wildcard $(SRCDIR)/launcher/*.cpp)

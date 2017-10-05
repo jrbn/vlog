@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include "LinearRegression.h"
-#include "LogisticRegression.h"
+#include <vlog/LogisticRegression.h>
 
 using namespace std;
 
@@ -83,6 +83,7 @@ void fires_vs_theft() {
     cout << "Estimated theft: " << temperature << endl;
 }
 
+/*
 int main(int argc, char* argv[]) {
     vector<Instance> instances = LogisticRegression::readDataset(argv[1]);
     LogisticRegression lr(5);
@@ -125,6 +126,6 @@ int main(int argc, char* argv[]) {
 
         cout << endl << endl;
     }
-*/
+
     return 0;
-}
+}*/
