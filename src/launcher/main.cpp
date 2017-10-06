@@ -53,6 +53,9 @@
 #include <thread>
 #include <csignal>
 #include <csetjmp>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 using namespace std;
 namespace timens = boost::chrono;
@@ -480,7 +483,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
         }
     }
 
-    #if DEBUG
+#if DEBUG
     // Try printing graph
     for (auto it = graph.begin(); it != graph.end(); ++it) {
         uint16_t id = it->first;
@@ -491,12 +494,12 @@ std::vector<std::string> generateTrainingQueries(int argc,
             std::vector<Substitution> sub = nei[i].second;
             for (int j = 0; j < sub.size(); ++j){
                 std::cout << p.getPredicateName(nei[i].first.getId()) << "{" << sub[j].origin << "->"
-                << sub[j].destination.getId() << " , " << sub[j].destination.getValue() << "}" << std::endl;
+                    << sub[j].destination.getId() << " , " << sub[j].destination.getValue() << "}" << std::endl;
             }
         }
         std::cout << "=====" << std::endl;
     }
-    #endif
+#endif
 
     // Gather all predicates
     std::vector<uint8_t> ids = p.getAllPredicateIds();
@@ -834,9 +837,9 @@ cout.rdbuf(strm_buffer);
 jmp_buf gBuffer;
 
 void alarmHandler(int signalNumber) {
-    BOOST_LOG_TRIVIAL(info) << "Got alarm signal";
+    //BOOST_LOG_TRIVIAL(info) << "Got alarm signal";
     // Throw something that is otherwise unused.
-    signal(SIGALRM, alarmHandler);
+    //signal(SIGALRM, alarmHandler);
     longjmp(gBuffer, signalNumber);
 }
 
@@ -844,9 +847,9 @@ string selectStrategy(EDBLayer &edb, Program &p, Literal &literal, Reasoner &rea
     string strategy = vm["selectionStrategy"].as<string>();
     int maxDepth = vm["estimationDepth"].as<int>();
     if (strategy == "" || strategy == "cardEst") {
-	// Use the original cardinality estimation strategy
-	ReasoningMode mode = reasoner.chooseMostEfficientAlgo(literal, edb, p, NULL, NULL, maxDepth);
-	return mode == TOPDOWN ? "qsqr" : "magic";
+        // Use the original cardinality estimation strategy
+        ReasoningMode mode = reasoner.chooseMostEfficientAlgo(literal, edb, p, NULL, NULL, maxDepth);
+        return mode == TOPDOWN ? "qsqr" : "magic";
     }
     // Add strategies here ...
     BOOST_LOG_TRIVIAL(error) << "Unrecognized selection strategy: " << strategy;
@@ -864,103 +867,105 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 
     boost::chrono::system_clock::time_point startQ1 = boost::chrono::system_clock::now();
 
-    if (timeout > 0) {
-        if (signal(SIGALRM, alarmHandler) == SIG_ERR) {
-	    BOOST_LOG_TRIVIAL(info) << "Could not set timeout";
-	} else {
-	    BOOST_LOG_TRIVIAL(info) << "Installed alarm signal handler; Now setting alarm over " << timeout << " sec";
-        // ualarm does not work for timeouts more than 1 second because
-        // The type useconds_t is an unsigned integer type capable of holding integers in the range [0,1000000]
-	    //ualarm((useconds_t)(timeout * 1000000), (useconds_t)(timeout * 1000000)); //Wait timeout seconds
-        int ret = alarm(timeout);
-        BOOST_LOG_TRIVIAL(info) << "alarm returned " << ret;
-	}
-    }
+   // if (timeout > 0) {
+   //     if (signal(SIGALRM, alarmHandler) == SIG_ERR) {
+   //         BOOST_LOG_TRIVIAL(info) << "Could not set timeout";
+   //     } else {
+   //         BOOST_LOG_TRIVIAL(info) << "Installed alarm signal handler; Now setting alarm over " << timeout << " sec";
+   //         // ualarm does not work for timeouts more than 1 second because
+   //         // The type useconds_t is an unsigned integer type capable of holding integers in the range [0,1000000]
+   //         //ualarm((useconds_t)(timeout * 1000000), (useconds_t)(timeout * 1000000)); //Wait timeout seconds
+   //         int ret = alarm(timeout);
+   //         BOOST_LOG_TRIVIAL(info) << "alarm returned " << ret;
+   //     }
+   // }
 
-    int sig;
-    try {
-    if ((sig = setjmp(gBuffer)) == 0) {
-        TupleIterator *iter;
+    //int sig;
+    //try {
+    //    if ((sig = setjmp(gBuffer)) == 0) {
+            TupleIterator *iter;
 
-        if (algo == "edb") {
-            iter = reasoner.getEDBIterator(literal, NULL, NULL, edb, onlyVars, NULL);
-        } else if (algo == "magic") {
-            iter = reasoner.getMagicIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
-        } else if (algo == "qsqr") {
-            iter = reasoner.getTopDownIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
-        } else if (algo == "mat") {
-            iter = reasoner.getMaterializationIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
-        } else {
-            BOOST_LOG_TRIVIAL(error) << "Unrecognized reasoning algorithm: " << algo;
-            throw 10;
-        }
-
-        long count = 0;
-        int sz = iter->getTupleSize();
-        if (nVars == 0) {
-            cout << (iter->hasNext() ? "TRUE" : "FALSE") << endl;
-            count = (iter->hasNext() ? 1 : 0);
-        } else {
-            while (iter->hasNext()) {
-            iter->next();
-            count++;
-            if (printResults) {
-                for (int i = 0; i < sz; i++) {
-                char supportText[MAX_TERM_SIZE];
-                uint64_t value = iter->getElementAt(i);
-                if (i != 0) {
-                    cout << " ";
-                }
-                if (!edb.getDictText(value, supportText)) {
-                    cerr << "Term " << value << " not found" << endl;
-                    cout << value;
-                } else {
-                    cout << supportText;
-                }
-                }
-                cout << endl;
+            if (algo == "edb") {
+                iter = reasoner.getEDBIterator(literal, NULL, NULL, edb, onlyVars, NULL);
+            } else if (algo == "magic") {
+                iter = reasoner.getMagicIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
+            } else if (algo == "qsqr") {
+                BOOST_LOG_TRIVIAL(info) << "Calling qsqr top down iterator...";
+                iter = reasoner.getTopDownIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
+                BOOST_LOG_TRIVIAL(info) << "Returned from top down iterator...";
+            } else if (algo == "mat") {
+                iter = reasoner.getMaterializationIterator(literal, NULL, NULL, edb, p, onlyVars, NULL);
+            } else {
+                BOOST_LOG_TRIVIAL(error) << "Unrecognized reasoning algorithm: " << algo;
+                throw 10;
             }
+
+            long count = 0;
+            int sz = iter->getTupleSize();
+            if (nVars == 0) {
+                cout << (iter->hasNext() ? "TRUE" : "FALSE") << endl;
+                count = (iter->hasNext() ? 1 : 0);
+            } else {
+                while (iter->hasNext()) {
+                    iter->next();
+                    count++;
+                    if (printResults) {
+                        for (int i = 0; i < sz; i++) {
+                            char supportText[MAX_TERM_SIZE];
+                            uint64_t value = iter->getElementAt(i);
+                            if (i != 0) {
+                                cout << " ";
+                            }
+                            if (!edb.getDictText(value, supportText)) {
+                                cerr << "Term " << value << " not found" << endl;
+                                cout << value;
+                            } else {
+                                cout << supportText;
+                            }
+                        }
+                        cout << endl;
+                    }
+                }
             }
-        }
-        boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
+            boost::chrono::duration<double> durationQ1 = boost::chrono::system_clock::now() - startQ1;
 
-        delete iter;
+            delete iter;
 
-            BOOST_LOG_TRIVIAL(info) << "Destroying the alarm";
-            alarm(0);
+            //BOOST_LOG_TRIVIAL(info) << "Destroying the alarm";
+            //alarm(0);
             //ualarm((useconds_t) 0, (useconds_t) 0);	// reset alarm
 
-        if (times > 0) {
-            // Redirect output
-            boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
-            for (int j = 0; j < times; j++) {
-            TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
-            int sz = iter->getTupleSize();
-            while (iter->hasNext()) {
-                iter->next();
-            }
-            }
-            boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
+            if (times > 0) {
+                // Redirect output
+                boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
+                for (int j = 0; j < times; j++) {
+                    TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
+                    int sz = iter->getTupleSize();
+                    while (iter->hasNext()) {
+                        iter->next();
+                    }
+                }
+                boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
 
-            BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-            BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
-        } else {
-            BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-        }
-        return (durationQ1.count() * 1000);
-    } else {
-        //throw(sig);
-        throw true;
-    }}
-    catch (bool e) {
-	BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", got timeout";
-	// Reset signal mask so we can do it again ...
-	sigset_t x;
-	sigemptyset (&x);
-	sigaddset(&x, SIGALRM);
-	sigprocmask(SIG_UNBLOCK, &x, NULL);
-	return timeout * 1000;
-    }
+                BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
+                BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
+            } else {
+                BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
+            }
+            return (durationQ1.count() * 1000);
+        //} else {
+            //throw(sig);
+        //    throw true;
+        //}}
+    //catch (bool e) {
+    //    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", got timeout";
+    //    // Reset signal mask so we can do it again ...
+    //    sigset_t x;
+    //    sigemptyset (&x);
+    //    sigaddset(&x, SIGALRM);
+    //    sigprocmask(SIG_UNBLOCK, &x, NULL);
+    //    return timeout * 1000;
+    //}
 }
 
 void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reasoner, po::variables_map &vm) {
@@ -969,28 +974,28 @@ void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reas
     int maxDepth = vm["estimationDepth"].as<int>();
 
     if (literal.getPredicate().getType() == EDB) {
-	if (algo != "edb") {
-	    BOOST_LOG_TRIVIAL(info) << "Overriding strategy, setting it to edb";
-	    algo = "edb";
-	}
+        if (algo != "edb") {
+            BOOST_LOG_TRIVIAL(info) << "Overriding strategy, setting it to edb";
+            algo = "edb";
+        }
     }
 
     if (algo == "both" || algo == "onlyMetrics") {
-	Metrics m;
-	reasoner.getMetrics(literal, NULL, NULL, edb, p, m, maxDepth);
-	BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
-	if (algo == "both") {
-	    double t2 = runAlgo("magic", literal, edb, p, reasoner, vm);
-	    BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;
-	    double t1 = runAlgo("qsqr", literal, edb, p, reasoner, vm);
-	    BOOST_LOG_TRIVIAL(info) << "qsqr time = " << t1;
-	}
-	return;
+        Metrics m;
+        reasoner.getMetrics(literal, NULL, NULL, edb, p, m, maxDepth);
+        BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
+        if (algo == "both") {
+            double t2 = runAlgo("magic", literal, edb, p, reasoner, vm);
+            BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;
+            double t1 = runAlgo("qsqr", literal, edb, p, reasoner, vm);
+            BOOST_LOG_TRIVIAL(info) << "qsqr time = " << t1;
+        }
+        return;
     }
 
     if (algo == "auto" || algo == "") {
-	algo = selectStrategy(edb, p, literal, reasoner, vm);
-	BOOST_LOG_TRIVIAL(info) << "Selection strategy determined that we go for " << algo;
+        algo = selectStrategy(edb, p, literal, reasoner, vm);
+        BOOST_LOG_TRIVIAL(info) << "Selection strategy determined that we go for " << algo;
     }
 
     runAlgo(algo, literal, edb, p, reasoner, vm);
@@ -1049,6 +1054,77 @@ void execLiteralQuery(EDBLayer &edb, po::variables_map &vm) {
     Reasoner reasoner(vm["reasoningThreshold"].as<long>());
     runLiteralQuery(edb, p, literal, reasoner, vm);
 }
+
+std::string executeCommand(const char* cmd, char * const args[]) {
+    int pipefd[2];
+    pipe(pipefd);
+
+    sigset_t mask;
+    sigset_t orig_mask;
+    struct timespec timeout;
+    pid_t pid;
+
+    sigemptyset (&mask);
+    sigaddset(&mask, SIGCHLD);
+
+    if (sigprocmask(SIG_BLOCK, &mask, &orig_mask) < 0) {
+        std::cerr << "fatal error";
+        return "";
+    }
+
+    pid = fork();
+    if (pid == 0) {
+        close(pipefd[0]);
+        dup2(pipefd[1] ,1);
+        dup2(pipefd[1], 2);
+        close(pipefd[1]);
+        execv(cmd, args);
+    } else {
+        timeout.tv_sec = 10;
+        timeout.tv_nsec = 0;
+
+        do {
+            if (sigtimedwait(&mask, NULL, &timeout) < 0) {
+                if (errno == EINTR) {
+                    // interrupted by signal other than SIGCHLD
+                    continue;
+                } else if (errno == EAGAIN) {
+                    std::cout << "Timeout. Killing child" << endl;
+                    kill(pid, SIGKILL);
+                } else {
+                    std::cerr << "sigtimedwait failed";
+                    return "FATAL";
+                }
+            }
+            break;
+        } while(1);
+
+        if (waitpid(pid, NULL, 0) < 0) {
+            std::cerr << "waitpid";
+            return "FATAL";
+        }
+        // parent
+        fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
+        string result = "";
+        char buffer[1024];
+        while (read(pipefd[0], buffer, sizeof(buffer)) > 0) {
+            result += buffer;
+        }
+
+        return result;
+    }
+    /*std::array<char, 128> buffer;
+    std::string result;
+    std::shared_ptr<FILE> pipe(popen(cmd, "r"), pclose);
+    if (!pipe) throw std::runtime_error("popen() failed!");
+    while (!feof(pipe.get())) {
+        if (fgets(buffer.data(), 128, pipe.get()) != nullptr)
+            result += buffer.data();
+    }
+    return result;
+    */
+}
+
 
 int main(int argc, const char** argv) {
 
@@ -1158,6 +1234,8 @@ int main(int argc, const char** argv) {
         Reasoner reasoner(vm["reasoningThreshold"].as<long>());
         int nQueries = trainingQueries.size();
         vector<Instance> dataset;
+        // ../vlog queryLiteral -e edb-lubm.conf --rule /home/uji300/vlog/examples/rules/aaai2016/LUBM_LE.dlog --reasoningAlgo edb  -l info -q "TE(A,B,C)" | wc -l
+        std::string rulesFile = vm["rules"].as<string>();
         for (int i = 0; i < nQueries; ++i) {
             vector<int> data;
             int label;
@@ -1167,10 +1245,22 @@ int main(int argc, const char** argv) {
             //runAlgo("both", literal, *layer, p, reasoner, vm);
             Metrics m;
             reasoner.getMetrics(literal, NULL, NULL, *layer, p, m, maxDepth);
+            std::string algorithm = "magic";
+            std::string newCommand(argv[0]);
+            char *const args [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--timeoutLiteral", "10", "-q", const_cast<char*>(trainingQueries[i].c_str()), NULL};
+            std::string magicOut = executeCommand(argv[0], args);
+            BOOST_LOG_TRIVIAL(info) << "magic output : " << magicOut;
+            algorithm = "qsqr";
+            char * const args2 [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--timeoutLiteral", "10", "-q", const_cast<char*>(trainingQueries[i].c_str()), NULL};
+            //qsqrCommand += " queryLiteral -e " + edbFile + " --rule " + rulesFile + " --reasoningAlgo " + algorithm + " -l info --timeoutLiteral 10 -q \"" + trainingQueries[i] + "\"";
+            std::string qsqrOut = executeCommand(argv[0], args2);
+            BOOST_LOG_TRIVIAL(info) << qsqrOut;
             //BOOST_LOG_TRIVIAL(info) << "Query: " << query << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
-            double t2 = runAlgo("magic", literal, *layer, p, reasoner, vm);
+            //double t2 = runAlgo("magic", literal, *layer, p, reasoner, vm);
             //BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;
-            double t1 = runAlgo("qsqr", literal, *layer, p, reasoner, vm);
+            //double t1 = runAlgo("qsqr", literal, *layer, p, reasoner, vm);
+            double t1 = 1.0;
+            double t2 = 2.0;
             int winnerAlgo = 0; // magic
             if (t1 < t2) {
                 winnerAlgo = 1;
