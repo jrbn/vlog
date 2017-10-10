@@ -23,7 +23,7 @@ void LogisticRegression::train(vector<Instance>& instances) {
     for (int n = 0; n < ITERATIONS; ++n) {
         double lik = 0.0;
         for (int i = 0; i < instances.size(); ++i) {
-            vector<int> x (instances.at(i).x);
+            vector<double> x (instances.at(i).x);
             double predicted = classify(x);
             int label = instances.at(i).label;
             for (int j = 0; j < weights.size(); ++j) {
@@ -38,11 +38,11 @@ void LogisticRegression::train(vector<Instance>& instances) {
         strs << lik;
         std::string strDouble = strs.str();
 
-        std::cout << "Iteration: " << n << " " + Utils::stringify(weights) + " mle: " + strDouble;
+        //std::cout << "Iteration: " << n << " " + Utils::stringify(weights) + " mle: " + strDouble;
     }
 }
 
-double LogisticRegression::classify(vector<int>& x) {
+double LogisticRegression::classify(vector<double>& x) {
     double logit = 0.0;
     for (int i = 0; i < weights.size(); ++i) {
         logit += weights[i] * x[i];
@@ -72,7 +72,7 @@ vector<Instance> LogisticRegression::readDataset(std::string fileName) {
 
         // Skip the first and last column (labels)
         int i = 1;
-        vector<int> data(columns.size() - 2, 0);
+        vector<double> data(columns.size() - 2, 0);
         for (i = 1; i < columns.size() - 1; ++i) {
             data[i-1] = atoi(columns[i].c_str());
         }

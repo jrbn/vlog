@@ -9,9 +9,9 @@ using namespace std;
 class Instance {
     public:
         int label;
-        vector<int> x;
+        vector<double> x;
 
-        Instance(int label, vector<int> x) {
+        Instance(int label, vector<double> x) {
             this->label = label;
             this->x = x;
         }
@@ -31,7 +31,7 @@ class LogisticRegression {
     public:
         LogisticRegression(int n);
         void train(vector<Instance>& instances);
-        double classify(vector<int>&); // predict() function
+        double classify(vector<double>&); // predict() function
         static vector<Instance> readDataset(std::string file);
 };
 
