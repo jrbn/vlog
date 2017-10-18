@@ -724,7 +724,11 @@ Literal Program::parseLiteral(std::string l) {
 			continue;
 		    }
 		    if (tuple[posTerm] == '\"') {
-			break;
+                // must increment index here
+                // otherwise, this double-quote is treated in the next
+                // iteration.
+                posTerm++;
+			    break;
 		    }
 		    posTerm++;
 		}
@@ -788,7 +792,7 @@ Literal Program::parseLiteral(std::string l) {
         cardPredicates.insert(make_pair(predid, t.size()));
     } else {
 	if (cardPredicates.find(predid)->second != t.size()) {
-	    BOOST_LOG_TRIVIAL(info) << "Wrong size in predicate: should be " << (int) cardPredicates.find(predid)->second;
+	    BOOST_LOG_TRIVIAL(info) << "Wrong size in predicate: should be " << (int) cardPredicates.find(predid)->second << " found " << (int) t.size();
 	    throw 10;
 	}
     }

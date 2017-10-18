@@ -502,7 +502,8 @@ std::vector<std::string> generateTrainingQueries(int argc,
 
     // Gather all predicates
     std::vector<uint8_t> ids = p.getAllPredicateIds();
-
+    std::ofstream allPredicatesLog("allPredicatesInQueries.log");
+    unsigned int seed = (unsigned int) ((clock() ^ 413711) % 105503);
     for (int i = 0; i < ids.size(); ++i) {
         int neighbours = graph[ids[i]].size();
         if (!p.isPredicateIDB(ids[i])) {
@@ -516,6 +517,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
             std::vector<std::vector<uint64_t>> output;
             uint64_t maxTuples = vm["maxTuples"].as<unsigned int>();
             output = reasoner.getRandomEDBTuples(literal, db, maxTuples);
+            srand(seed);
             for (int j = 0; j < output.size(); ++j) {
                 vector<Substitution> subs;
                 for (int k = 0; k < card; ++k) {
@@ -543,6 +545,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
                         uint8_t qCard = graph[predId][randomNeighbour].first.getCardinality();
                         std::string qQuery = makeGenericQuery(p, qId, qCard);
                         Literal qLiteral = p.parseLiteral(qQuery);
+                        allPredicatesLog << p.getPredicateName(qId) << std::endl;
                         std::string qFinalQuery = makeComplexQuery(p, qLiteral, result, db);
                         allQueries.insert(qFinalQuery);
 
@@ -554,7 +557,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
             }
         }
     }
-
+    allPredicatesLog.close();
     std::vector<std::string> queries;
     for (std::set<std::string>::iterator it = allQueries.begin(); it !=  allQueries.end(); ++it) {
         queries.push_back(*it);
@@ -1053,9 +1056,9 @@ std::string executeCommand(const char* cmd, char * const args[], int timeoutSeco
 }
 
 double parseOutput(std::string output) {
-    int pos = output.find("Runtime = ");
-    int posUnit = output.rfind(" milliseconds");
-    int posStart = pos + strlen("Runtime = ");
+    int pos = output.find("query runtime = ");
+    int posUnit = output.rfind(" msec");
+    int posStart = pos + strlen("query runtime = ");
     int lengthTime = posUnit - posStart;
     string timeString = output.substr(posStart, lengthTime);
     double ret = atof(timeString.c_str());
@@ -1175,7 +1178,7 @@ int main(int argc, const char** argv) {
         vector<Instance> dataset;
         // ../vlog queryLiteral -e edb-lubm.conf --rule /home/uji300/vlog/examples/rules/aaai2016/LUBM_LE.dlog --reasoningAlgo edb  -l info -q "TE(A,B,C)" | wc -l
         std::string rulesFile = vm["rules"].as<string>();
-
+        std::ofstream csvFile("training.csv");
         start = timens::system_clock::now();
         for (int i = 0; i < nQueries; ++i) {
             vector<double> data;
@@ -1207,9 +1210,9 @@ int main(int argc, const char** argv) {
             if (magicOut != "TIMEDOUT") {
                 magicTime = parseOutput(magicOut);
             }
-            int winnerAlgo = 0; // magic
+            std::string winnerAlgo = "MAGIC"; // magic
             if (qsqrTime < magicTime) {
-                winnerAlgo = 1;
+                winnerAlgo = "QSQR";
             }
             if (qsqrTime == magicTime) {
                 // Don't consider this query for training
@@ -1217,15 +1220,21 @@ int main(int argc, const char** argv) {
                 continue;
             }
             BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<< winnerAlgo << std::endl;
+            csvFile << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<< winnerAlgo << std::endl;
             data.push_back(m.estimate);
             data.push_back(m.cost);
             data.push_back(m.countRules);
             data.push_back(m.countIntermediateQueries);
             data.push_back(m.countUniqueRules);
-            label = winnerAlgo;
+            label = (winnerAlgo == "QSQR") ? 1 : 0;
             Instance instance(label, data);
             dataset.push_back(instance);
         }
+        if (csvFile.fail()) {
+            BOOST_LOG_TRIVIAL(error) << "Error writing to the csv file";
+        }
+        csvFile.close();
+
         boost::chrono::duration<double> secData = boost::chrono::system_clock::now() - start;
         BOOST_LOG_TRIVIAL(info) << nQueries << " queries's training data is generated in " << secData.count() << " seconds";
 
