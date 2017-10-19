@@ -16,6 +16,7 @@ STR_vector = "Vector:"
 
 def generateQueries(rule, arity, resultRecords):
 
+    countQueries = 0
     # Generic query that results in all the possible records
     # Example : ?RP0(A,B)
     query = rule + "("
@@ -33,6 +34,7 @@ def generateQueries(rule, arity, resultRecords):
     else:
         queries[100+(len(resultRecords))] = [query]
 
+    countQueries += 1
     # Queries by replacing each variable by a constant
     # We use variable for i and constants for other columns from result records
     if arity > 1:
@@ -62,13 +64,17 @@ def generateQueries(rule, arity, resultRecords):
                     if (i > 3):
                         if 50 in queries:
                             queries[50].append(query)
+                            countQueries += 1
                         else:
                             queries[50] = [query]
+                            countQueries += 1
                     else:
                         if (i+1 in queries):
                             queries[i+1].append(query)
+                            countQueries += 1
                         else:
                             queries[i+1] = [query]
+                            countQueries += 1
 
     # Boolean queries
     for i, key in enumerate(sorted(resultRecords)):
@@ -84,13 +90,19 @@ def generateQueries(rule, arity, resultRecords):
                 if (i > 3):
                     if (1050 in queries):
                         queries[1050].append(query)
+                        countQueries += 1
                     else:
                         queries[1050] = [query]
+                        countQueries += 1
                 else:
                     if (1000+i+1 in queries):
                         queries[1000+i+1].append(query)
+                        countQueries += 1
                     else:
                         queries[1000+i+1] = [query]
+                        countQueries += 1
+
+    return countQueries
 
 
 '''
@@ -111,7 +123,7 @@ def runQueries(queries):
         iterations = 0
         timeoutCount = 0
         for q in uniqueQueries:
-            print ("Iteration #", iterations)
+            print ("Iteration #", iterations, " : " , q)
             # Here invoke vlog and execute query and get the runtime
             timeout = False
             try:
@@ -125,7 +137,12 @@ def runQueries(queries):
                 sys.stderr.write("\n")
                 timeout = True
 
-            if timeout == False:
+            if timeout:
+                print (" timed out ")
+                timeoutCount += 1
+                if timeoutCount > 10:
+                    break
+            else:
                 numQueries += 1
                 output = str(output)
                 index = output.find(STR_magic_time)
@@ -137,21 +154,14 @@ def runQueries(queries):
                 #index = output.find(STR_rows)
                 #numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
 
-                # Consider only those queries that run in less than 10 seconds
-                if float(timeQsqr) > 10000 or float(timeMagic) > 10000:
-                    timeoutCount += 1
-                    if timeoutCount > 10:
-                        break
-                    continue
-
                 index = output.find(STR_vector)
                 vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
                 vector = vector_str.split(',')
 
                 if float(timeQsqr) < float(timeMagic):
-                    winnerAlgorithm = 1 #"QSQR"
+                    winnerAlgorithm = "QSQR"
                 else:
-                    winnerAlgorithm = 0 #"MagicSets"
+                    winnerAlgorithm = "MagicSets"
 
                 allFeatures = []
                 for v in vector:
@@ -231,8 +241,8 @@ def parseResultFile(name, resultFile):
 
         results[int(columns[0])].append(operands)
 
-    generateQueries(name, arity, results)
-    #print (len(results))
+    nQueries = generateQueries(name, arity, results)
+    print (nQueries , " queries generated.")
 
 '''
 Takes rule file and rule names array as the input
@@ -260,9 +270,9 @@ def parse_args():
     parser.add_argument('--mat', type=str, required = True, help = 'Path to the materialized directory')
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type", default = 30)
-    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 40)
-    parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 50000)
-    parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 1000000)
+    parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 15)
+    parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 5000)
+    parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 10000)
     parser.add_argument('--out', type=str, help = 'Name of the query output file')
 
     return parser.parse_args()
@@ -275,7 +285,6 @@ ARG_NQ = args.nq
 resultFiles = []
 rulesFile = args.rules
 outFile = args.out
-
 with open(outFile, 'w') as fout:
     fout.write("QueryType QSQR MagicSets\n")
 
@@ -291,7 +300,6 @@ for root, dirs, files in os.walk(os.path.abspath(matDir)):
         ruleResultFilePath = os.path.join(root, f)
         rulesWithResult[f] = ruleResultFilePath
         resultFiles.append(ruleResultFilePath)
-        #print (f)
 
 queries = {}
 numQueries = 0
