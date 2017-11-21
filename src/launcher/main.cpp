@@ -454,7 +454,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
         ) {
     std::set<string> allQueries;
 
-    typedef std::pair<Predicate, vector<Substitution>> EndpointWithEdge;
+    typedef std::pair<PredId_t, vector<Substitution>> EndpointWithEdge;
     typedef std::unordered_map<uint16_t, std::vector<EndpointWithEdge>> Graph;
     Graph graph;
 
@@ -477,7 +477,7 @@ std::vector<std::string> generateTrainingQueries(int argc,
             }
             // Calculate sigmaB * sigmaH
             std::vector<Substitution> edge_label = inverse_concat(sigmaB, sigmaH);
-            EndpointWithEdge neighbour = std::make_pair(ph, edge_label);
+            EndpointWithEdge neighbour = std::make_pair(ph.getId(), edge_label);
             graph[pb.getId()].push_back(neighbour);
         }
     }
@@ -489,10 +489,10 @@ std::vector<std::string> generateTrainingQueries(int argc,
         std::cout << p.getPredicateName(id) << " : " << std::endl;
         std::vector<EndpointWithEdge> nei = it->second;
         for (int i = 0; i < nei.size(); ++i) {
-            Predicate pred = nei[i].first;
+            Predicate pred = p.getPredicate(nei[i].first);
             std::vector<Substitution> sub = nei[i].second;
             for (int j = 0; j < sub.size(); ++j){
-                std::cout << p.getPredicateName(nei[i].first.getId()) << "{" << sub[j].origin << "->"
+                std::cout << p.getPredicateName(nei[i].first) << "{" << sub[j].origin << "->"
                     << sub[j].destination.getId() << " , " << sub[j].destination.getValue() << "}" << std::endl;
             }
         }
@@ -501,11 +501,16 @@ std::vector<std::string> generateTrainingQueries(int argc,
 #endif
 
     // Gather all predicates
-    std::vector<uint8_t> ids = p.getAllPredicateIds();
+    std::vector<PredId_t> ids = p.getAllPredicateIds();
     std::ofstream allPredicatesLog("allPredicatesInQueries.log");
     unsigned int seed = (unsigned int) ((clock() ^ 413711) % 105503);
     for (int i = 0; i < ids.size(); ++i) {
         int neighbours = graph[ids[i]].size();
+        BOOST_LOG_TRIVIAL(info) << +ids[i] << " : ";
+        int temp = ids[i];
+        if (temp == 0) {
+            cout << "gotcha! " << temp <<  " i = " << i << " ids size : " << ids.size() << std::endl;
+        }
         if (!p.isPredicateIDB(ids[i])) {
             //std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
             Predicate edbPred = p.getPredicate(ids[i]);
@@ -532,22 +537,29 @@ std::vector<std::string> generateTrainingQueries(int argc,
                     int n = vm["depth"].as<unsigned int>();
                     vector<Substitution> sigma = options[l];
                     PredId_t predId = edbPred.getId();
+                    // TODO: maintain a bitmap of neighbours
+                    // Keep track of which neighbours are chosen as random neighbours
+                    // and mark them. Don't use the same edge again
                     while (n != 0) {
                         // Choose a random arc
                         uint32_t nNeighbours = graph[predId].size();
                         if (!nNeighbours) {
+                            // break if there are no more arcs
                             break;
                         }
                         uint32_t randomNeighbour = rand() % nNeighbours;
                         std::vector<Substitution> sigmaN = graph[predId][randomNeighbour].second;
                         std::vector<Substitution> result = concat(sigmaN, sigma);
-                        PredId_t qId  = graph[predId][randomNeighbour].first.getId();
-                        uint8_t qCard = graph[predId][randomNeighbour].first.getCardinality();
+                        PredId_t qId  = graph[predId][randomNeighbour].first;
+                        uint8_t qCard = p.getPredicate(graph[predId][randomNeighbour].first).getCardinality();
                         std::string qQuery = makeGenericQuery(p, qId, qCard);
                         Literal qLiteral = p.parseLiteral(qQuery);
                         allPredicatesLog << p.getPredicateName(qId) << std::endl;
                         std::string qFinalQuery = makeComplexQuery(p, qLiteral, result, db);
                         allQueries.insert(qFinalQuery);
+
+                        // Remove the arc after it was chosen
+                        //graph[predId].erase(graph[predId].begin() + randomNeighbour);
 
                         predId = qId;
                         sigma = result;
@@ -949,7 +961,11 @@ void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reas
     if (algo == "both" || algo == "onlyMetrics") {
         Metrics m;
         reasoner.getMetrics(literal, NULL, NULL, edb, p, m, maxDepth);
-        BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: " << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules;
+        BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: "
+        << m.cost << ", " << m.estimate << ", " << m.countRules << ", "
+        << m.countUniqueRules << ", "
+        << m.countIntermediateQueries;
+        //<< ", " << +m.boundedness;
         if (algo == "both") {
             double t2 = runAlgo("magic", literal, edb, p, reasoner, vm);
             BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;
@@ -1178,7 +1194,10 @@ int main(int argc, const char** argv) {
         vector<Instance> dataset;
         // ../vlog queryLiteral -e edb-lubm.conf --rule /home/uji300/vlog/examples/rules/aaai2016/LUBM_LE.dlog --reasoningAlgo edb  -l info -q "TE(A,B,C)" | wc -l
         std::string rulesFile = vm["rules"].as<string>();
-        std::ofstream csvFile("training.csv");
+        std::string trainingFileName = fs::path(rulesFile).stem().string();
+        trainingFileName += "-training.csv";
+        std::ofstream csvFile(trainingFileName);
+        std::ofstream magicSetQueriesLog("magicSetQueries.log");
         start = timens::system_clock::now();
         for (int i = 0; i < nQueries; ++i) {
             vector<double> data;
@@ -1192,40 +1211,54 @@ int main(int argc, const char** argv) {
             reasoner.getMetrics(literal, NULL, NULL, *layer, p, m, maxDepth);
             std::string algorithm = "qsqr";
             std::string newCommand(argv[0]);
-            char *const args [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--timeoutLiteral", "10", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
+            char *const args [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
+            BOOST_LOG_TRIVIAL(info) << "Timeout for QSQR: " << timeout;
             std::string qsqrOut = executeCommand(argv[0], args, timeout);
 
-            double qsqrTime = timeout;
+            double qsqrTime = timeout*1000;
             if (qsqrOut != "TIMEDOUT") {
                 qsqrTime = parseOutput(qsqrOut);
-                if ((unsigned int)(qsqrTime/1000 + 1.0) < timeout) {
-                    timeout = (qsqrTime/1000) + 1;
+                if ((int)((qsqrTime/1000) + 1.0) < timeout) {
+                    timeout = (qsqrTime/1000) + 1.0;
                 }
             }
+            BOOST_LOG_TRIVIAL(info) << "QSQR time = " << qsqrTime;
             algorithm = "magic";
-            char * const args2 [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--timeoutLiteral", "10", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
-            //qsqrCommand += " queryLiteral -e " + edbFile + " --rule " + rulesFile + " --reasoningAlgo " + algorithm + " -l info --timeoutLiteral 10 -q \"" + trainingQueries[i] + "\"";
+            char * const args2 [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
+            BOOST_LOG_TRIVIAL(info) << "Timeout for MAGIC: " << timeout;
             std::string magicOut = executeCommand(argv[0], args2, timeout);
-            double magicTime = timeout;
+            double magicTime = timeout*1000;
             if (magicOut != "TIMEDOUT") {
                 magicTime = parseOutput(magicOut);
             }
+            BOOST_LOG_TRIVIAL(info) << "MAGIC time = " << magicTime;
             std::string winnerAlgo = "MAGIC"; // magic
             if (qsqrTime < magicTime) {
                 winnerAlgo = "QSQR";
             }
             if (qsqrTime == magicTime) {
-                // Don't consider this query for training
-                BOOST_LOG_TRIVIAL(info) << query << " timed out for both algorithms. Skipping..." << endl;
-                continue;
+                BOOST_LOG_TRIVIAL(info) << query << " timed out for both algorithms. Prefering Magic sets..." << endl;
             }
-            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<< winnerAlgo << std::endl;
-            csvFile << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << ","<< winnerAlgo << std::endl;
-            data.push_back(m.estimate);
+            if (winnerAlgo == "MAGIC") {
+                magicSetQueriesLog << query << ", "
+                << m.cost << ", " << m.estimate << ", " << m.countRules << ", " << m.countUniqueRules << ","
+                << m.countIntermediateQueries << ", " <<
+                +m.boundedness << ", " << winnerAlgo << " QSQR time = " << qsqrTime << " Magic time = " << magicTime << std::endl;
+            }
+            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << " , " << winnerAlgo << std::endl;
+            csvFile << m.cost << ", "
+            << m.estimate << ", "
+            << m.countRules << ", "
+            << m.countUniqueRules << ","
+            << m.countIntermediateQueries << ", "
+            //<< +m.boundedness << ", "
+            << winnerAlgo << std::endl;
+
             data.push_back(m.cost);
+            data.push_back(m.estimate);
             data.push_back(m.countRules);
-            data.push_back(m.countIntermediateQueries);
             data.push_back(m.countUniqueRules);
+            data.push_back(m.countIntermediateQueries);
             label = (winnerAlgo == "QSQR") ? 1 : 0;
             Instance instance(label, data);
             dataset.push_back(instance);
@@ -1234,6 +1267,11 @@ int main(int argc, const char** argv) {
             BOOST_LOG_TRIVIAL(error) << "Error writing to the csv file";
         }
         csvFile.close();
+
+        if (magicSetQueriesLog.fail()) {
+            BOOST_LOG_TRIVIAL(error) << "Error writing to the magic set log file";
+        }
+        magicSetQueriesLog.close();
 
         boost::chrono::duration<double> secData = boost::chrono::system_clock::now() - start;
         BOOST_LOG_TRIVIAL(info) << nQueries << " queries's training data is generated in " << secData.count() << " seconds";

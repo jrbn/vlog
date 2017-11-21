@@ -182,7 +182,7 @@ void QSQR::estimateQuery(Metrics &metrics, int depth, Literal &l, std::vector<Ru
 	metrics.cost++;
         return;
     }
- 
+
     Predicate pred = l.getPredicate();
     metrics.countIntermediateQueries++;
 

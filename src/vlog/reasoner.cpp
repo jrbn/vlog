@@ -779,6 +779,7 @@ void Reasoner::getMetrics(Literal &query, std::vector<uint8_t> *posBindings, std
     std::unique_ptr<QSQR> evaluator = std::unique_ptr<QSQR>(
             new QSQR(layer, &program));
     memset(&metrics, 0, sizeof(Metrics));
+    metrics.boundedness = program.getBoundedness(query);
     std::vector<Rule> uniqueRules;
     evaluator->estimateQuery(metrics, maxDepth, query, uniqueRules);
     metrics.countUniqueRules = uniqueRules.size();

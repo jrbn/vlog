@@ -339,7 +339,7 @@ public:
         }
         return i;
     }
-    
+
     void checkRule() const;
 
     std::string tostring(Program *program, EDBLayer *db) const;
@@ -423,7 +423,7 @@ public:
 
     std::vector<std::string> getAllPredicateStrings();
 
-    std::vector<uint8_t> getAllPredicateIds();
+    std::vector<PredId_t> getAllPredicateIds();
 
     int getNEDBPredicates();
 
@@ -432,6 +432,8 @@ public:
     std::string tostring();
 
     static std::string compressRDFOWLConstants(std::string input);
+
+    uint8_t getBoundedness(Literal &);
 
     ~Program() {
     }

@@ -2,7 +2,7 @@
 #include <vlog/optimizer.h>
 #include <vlog/edb.h>
 #include <vlog/fcinttable.h>
-
+#include <vlog/reasoner.h>
 #include <kognac/consts.h>
 
 #include <boost/log/trivial.hpp>
@@ -990,8 +990,8 @@ std::vector<std::string> Program::getAllPredicateStrings() {
     return dictPredicates.getKeys();
 }
 
-std::vector<uint8_t> Program::getAllPredicateIds() {
-    std::vector<uint8_t> output;
+std::vector<PredId_t> Program::getAllPredicateIds() {
+    std::vector<PredId_t> output;
     std::vector<std::string> predicateStrings = this->getAllPredicateStrings();
     for (int i = 0; i < predicateStrings.size(); ++i) {
         output.push_back(this->getPredicate(predicateStrings[i]).getId());
@@ -1010,7 +1010,28 @@ std::string Program::tostring() {
     return output;
 }
 
-
+uint8_t Program::getBoundedness(Literal &query) {
+    int n = query.getTupleSize();
+    int nConstants = 0;
+    int nVariables = 0;
+    for (int i = 0; i < n; ++i) {
+        VTerm term = query.getTermAtPos(i);
+        uint8_t id = term.getId();
+        if (id == 0) {
+            //constant
+            nConstants++;
+        } else {
+            //variable
+            nVariables++;
+        }
+    }
+    if (nConstants == n) {
+        return BOUNDED;
+    } else if (nVariables == n) {
+        return FREE;
+    }
+    return RESTRICTED;
+}
 std::vector<Substitution> concat(std::vector<Substitution>& sigma1, std::vector<Substitution>& sigma2) {
     std::vector<Substitution> result;
     for (std::vector<Substitution>::iterator itr1 = sigma1.begin(); itr1 != sigma1.end(); ++itr1) {

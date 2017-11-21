@@ -15,6 +15,7 @@
 #define QUERY_ONDEM 1
 
 typedef enum {TOPDOWN, MAGIC} ReasoningMode;
+typedef enum {BOUNDED = 1, FREE, RESTRICTED} QueryType;
 
 struct Metrics {
     size_t estimate;
@@ -23,6 +24,7 @@ struct Metrics {
     double cost;
     int countRules;
     int countUniqueRules;
+    uint8_t boundedness;
 };
 
 class Reasoner {
