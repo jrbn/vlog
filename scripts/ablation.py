@@ -14,7 +14,7 @@ def parse_args():
     parser.add_argument('--test_file', type=str, required=True, help='Test data csv file')
     return parser.parse_args()
 
-COLUMNS = ["subjectBound", "objectBound", "numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
+COLUMNS = ["numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
 
 def perf_measures(yActual, yPredicted):
     TP = 0

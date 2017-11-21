@@ -11,6 +11,7 @@ from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 
 STR_magic_time = "magic time ="
 STR_qsqr_time = "qsqr time ="
+STR_time = "query runtime ="
 #STR_rows = "#rows ="
 STR_vector = "Vector:"
 
@@ -105,6 +106,28 @@ def generateQueries(rule, arity, resultRecords):
     return countQueries
 
 
+def runQueryWithAlgo(q, algo, startString, endString, maxTime):
+    timeout = False
+    time = 0
+    try:
+        output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', algo, '-l', 'info', '-q', q], stderr=STDOUT, timeout=maxTime)
+    except TimeoutExpired:
+        output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
+        timeout = True
+    except CalledProcessError:
+        sys.stderr.write("Exception raised because of the following query:")
+        sys.stderr.write(q)
+        sys.stderr.write("\n")
+        timeout = True
+
+    if timeout:
+        time = ARG_TIMEOUT*1000
+    else:
+        output = str(output)
+        index = output.find(startString)
+        time = output[index+len(startString)+1:output.find(endString, index)]
+    return time
+
 '''
 This function takses the queries dictionary has the input.
 Query type is the key and list of queries of that type is the value.
@@ -125,74 +148,53 @@ def runQueries(queries):
         for q in uniqueQueries:
             print ("Iteration #", iterations, " : " , q)
             # Here invoke vlog and execute query and get the runtime
-            timeout = False
-            try:
-                output = check_output(['../vlog', 'queryLiteral' ,'-e', args.conf, '--rules', rulesFile, '--reasoningAlgo', 'both', '-l', 'info', '-q', q], stderr=STDOUT, timeout=ARG_TIMEOUT*2)
-            except TimeoutExpired:
-                output = "Runtime = " + str(ARG_TIMEOUT) + "000 milliseconds. #rows = 0\\n"
-                timeout = True
-            except CalledProcessError:
-                sys.stderr.write("Exception raised because of the following query:")
-                sys.stderr.write(q)
-                sys.stderr.write("\n")
-                timeout = True
+            workingTimeout = ARG_TIMEOUT
+            timeQsqr = runQueryWithAlgo(q, "qsqr", STR_time, "msec", workingTimeout)
+            if (float(timeQsqr) / 1000) + 1 < workingTimeout:
+                workingTimeout = (float(timeQsqr)/1000)+1
+            timeMagic = runQueryWithAlgo(q, "magic", STR_time, "msec", workingTimeout)
+            vector_str = runQueryWithAlgo(q, "onlyMetrics", STR_vector, "\\n", ARG_TIMEOUT)
+            vector = vector_str.split(',')
 
-            if timeout:
+            if timeQsqr == timeMagic: #Means both timed out
                 print (" timed out ")
                 timeoutCount += 1
                 if timeoutCount > 10:
                     break
+
+            numQueries += 1
+            if float(timeQsqr) < float(timeMagic):
+                winnerAlgorithm = "QSQR"
             else:
-                numQueries += 1
-                output = str(output)
-                index = output.find(STR_magic_time)
-                timeMagic = output[index+len(STR_magic_time)+1:output.find("\\n", index)]
+                winnerAlgorithm = "MAGIC"
 
-                index = output.find(STR_qsqr_time)
-                timeQsqr = output[index+len(STR_qsqr_time)+1:output.find("\\n", index)]
+            allFeatures = []
+            for v in vector:
+                allFeatures.append(v)
+            #allFeatures.append(numResults)
+            allFeatures.append(winnerAlgorithm)
 
-                #index = output.find(STR_rows)
-                #numResults = output[index+len(STR_rows)+1:output.find("\\n", index)]
+            if float(timeQsqr) < float(timeMagic):
+                cntQSQRWon += 1
+            else:
+                cntMagicWon += 1
 
-                index = output.find(STR_vector)
-                vector_str = output[index+len(STR_vector)+1:output.find("\\n", index)]
-                vector = vector_str.split(',')
+            record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
+            queryStats += record + "\n"
+            print (record)
 
-                if float(timeQsqr) < float(timeMagic):
-                    winnerAlgorithm = "QSQR"
-                else:
-                    winnerAlgorithm = "MagicSets"
+            featureRecord = ""
+            for i, a in enumerate(allFeatures):
+                featureRecord += str(a)
+                if (i != len(allFeatures)-1):
+                    featureRecord += ","
+            featureRecord += "\n"
+            featureString += featureRecord
 
-                allFeatures = []
-                for v in vector:
-                    allFeatures.append(v)
-                #allFeatures.append(numResults)
-                allFeatures.append(winnerAlgorithm)
-
-                if float(timeQsqr) < float(timeMagic):
-                    cntQSQRWon += 1
-                else:
-                    cntMagicWon += 1
-
-                record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
-                queryStats += record + "\n"
-                print (record)
-
-                featureRecord = ""
-                if len(allFeatures) > 7:
-                    errstr = q+ " : " + "QSQR = " + timeQsqr+" Magic = "+timeMagic +" features : " + record + "\n"
-                    sys.stderr.write(errstr)
-                for i, a in enumerate(allFeatures):
-                    featureRecord += str(a)
-                    if (i != len(allFeatures)-1):
-                        featureRecord += ","
-                featureRecord += "\n"
-                featureString += featureRecord
-
-                iterations += 1
-                #TODO: generate all the possible queries
-                if iterations == ARG_NQ:
-                    break
+            iterations += 1
+            #TODO: generate all the possible queries
+            if iterations == ARG_NQ:
+                break
         # Here we are out of outer loop (of query types)
         # We have counts of qsqr and magic sets
         data += str(queryType) + " " + str(cntQSQRWon) + " " + str(cntMagicWon) + "\n"
@@ -286,7 +288,7 @@ resultFiles = []
 rulesFile = args.rules
 outFile = args.out
 with open(outFile, 'w') as fout:
-    fout.write("QueryType QSQR MagicSets\n")
+    fout.write("QueryType QSQR MAGIC\n")
 
 with open(outFile + '.features', 'w') as fout:
     fout.write("")
