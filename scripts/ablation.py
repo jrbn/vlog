@@ -34,10 +34,10 @@ def perf_measures(yActual, yPredicted):
             FP += 1
     return float(TP), float(FP), float(TN), float(FN)
 
-def train_and_eval(train_file, test_file, i, n):
+def train_and_eval(train_file, test_file, delColumn, n):
     FEATURES = copy.deepcopy(COLUMNS)
-    if i >= 0:
-        del(FEATURES[i])
+    if delColumn >= 0:
+        del(FEATURES[delColumn])
 
     df_train = pd.read_csv(
       train_file,
@@ -54,7 +54,7 @@ def train_and_eval(train_file, test_file, i, n):
     df_train = df_train.dropna(how='any', axis=0)
     df_test = df_test.dropna(how='any', axis=0)
 
-    i = 0;
+    i = 0
     dmatString = FEATURES[n-2] + ' ~'
     while i < n-2:
         dmatString += FEATURES[i]
@@ -72,16 +72,19 @@ def train_and_eval(train_file, test_file, i, n):
     #yTest, xTest = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + \
     #numberOfRules + numberOfQueries + numberOfUniqueRules', df_test, return_type = "dataframe")
     yTest, xTest = dmatrices(dmatString, df_test, return_type = "dataframe")
-    # check the accuracy on the training set
 
     predicted = model.predict(xTest)
 
     TP, FP, TN, FN = perf_measures(list(yTest.values), list(predicted))
 
-    #print ("TP: ", TP)
-    #print ("TN: ", TN)
-    #print ("FP: ", FP)
-    #print ("FN: ", FN)
+    if delColumn < 0: # If this is estimation with all features, print predictions
+        predictionsFile = os.path.splitext(test_file)[0] + "-predictions.log"
+        predictions = ""
+        for p in list(predicted):
+            predictions += str(p) + "\n"
+        with open(predictionsFile, 'w') as fout:
+            fout.write(predictions)
+
     precision = TP / (TP + FP)
     recall = TP / (TP + FN)
     f1score = 2*precision * recall / (precision + recall)
@@ -171,7 +174,7 @@ while i < n-1:
     train = 'feature-'+ 'train' + str(i+1) + '.csv'
     test = 'feature-' + 'test' + str(i+1) + '.csv'
 
-    accuracy = train_and_eval(train, test, i, n)
+    accuracy = train_and_eval(train_normalized, test_normalized, i, n)
     print ("#### without feature  (", i+1, ")" , COLUMNS[i], ": accuracy = ", accuracy )
     histogramData += COLUMNS[i] + " " + str(accuracy) + "\n"
     # Parse output and get the accuracy
