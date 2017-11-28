@@ -94,7 +94,37 @@ def train_and_eval(train_file, test_file, i, n):
 def normalizeColumn(fileName, column):
     #TODO: This file normalizes the said column from the file
     # and returns the new file
-    return newFile
+    xTemp = []
+    with open(fileName, 'r') as fin:
+        for line in fin.readlines():
+            # split into columns and calculate mean, min, max
+            columns = line.split(',')
+            xTemp.append(float(columns[column]))
+    X = np.array(xTemp, dtype=np.float64)
+    avgX = np.mean(X)
+    minX = np.min(X)
+    maxX = np.max(X)
+
+    for i,x in enumerate(X):
+        X[i] = float(x - avgX) / float(maxX - minX)
+
+    newRecords = ""
+    with open(fileName, 'r') as fin:
+        for row, line in enumerate(fin.readlines()):
+            columns = line.split(',')
+            cntColumns = len(columns)
+            for i,col in enumerate(columns):
+                if i == column:
+                    newRecords += str(X[row])
+                else:
+                    newRecords += str(col)
+                if i < cntColumns-1:
+                    newRecords += ","
+
+    newFileName = os.path.splitext(fileName)[0] + "-normalized.csv"
+    with open(newFileName, 'w') as fout:
+        fout.write(newRecords)
+    return newFileName
 
 def generate_feature_files(train, phase):
     with open(train, 'r') as fin:
@@ -124,14 +154,14 @@ args = parse_args()
 train = args.train_data
 test = args.test_data
 
-train_normalized = normalizeColumn(train, 1)
-test_normalized = normalizeColumn(test, 1)
+train_normalized = normalizeColumn(train, 0)
+test_normalized = normalizeColumn(test, 0)
 
-n = generate_feature_files(train, "train")
-generate_feature_files(test, "test")
+n = generate_feature_files(train_normalized, "train")
+generate_feature_files(test_normalized, "test")
 
 
-accuracy = train_and_eval(train, test, -1, n+1)
+accuracy = train_and_eval(train_normalized, test_normalized, -1, n+1)
 print ("Overall accuracy = ", accuracy)
 
 # Run linear model
@@ -157,3 +187,5 @@ while i < n-1:
     os.remove('feature-'+ 'train' + str(i+1) + '.csv')
     os.remove('feature-'+ 'test' + str(i+1) + '.csv')
     i += 1
+os.remove(train_normalized)
+os.remove(test_normalized)
