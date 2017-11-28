@@ -10,11 +10,11 @@ import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser(description = "Ablation Study")
-    parser.add_argument('--train_file', type=str, required=True, help='Training data csv file')
-    parser.add_argument('--test_file', type=str, required=True, help='Test data csv file')
+    parser.add_argument('--train_data', type=str, required=True, help='Training data csv file')
+    parser.add_argument('--test_data', type=str, required=True, help='Test data csv file')
     return parser.parse_args()
 
-COLUMNS = ["numberOfResults", "costOfComputing", "numberOfRules", "numberOfQueries", "numberOfUniqueRules", "algorithm"]
+COLUMNS = ["cost", "estimate", "countRules", "countUniqueRules", "countQueries", "algorithm"]
 
 def perf_measures(yActual, yPredicted):
     TP = 0
@@ -36,7 +36,9 @@ def perf_measures(yActual, yPredicted):
 
 def train_and_eval(train_file, test_file, i, n):
     FEATURES = copy.deepcopy(COLUMNS)
-    del(FEATURES[i])
+    if i >= 0:
+        del(FEATURES[i])
+
     df_train = pd.read_csv(
       train_file,
       names=FEATURES,
@@ -89,6 +91,11 @@ def train_and_eval(train_file, test_file, i, n):
     print("Accuracy = ", f1score)
     return f1score
 
+def normalizeColumn(fileName, column):
+    #TODO: This file normalizes the said column from the file
+    # and returns the new file
+    return newFile
+
 def generate_feature_files(train, phase):
     with open(train, 'r') as fin:
         lines = fin.readlines()
@@ -114,10 +121,18 @@ def generate_feature_files(train, phase):
     return n
 
 args = parse_args()
-train = args.train_file
-test = args.test_file
+train = args.train_data
+test = args.test_data
+
+train_normalized = normalizeColumn(train, 1)
+test_normalized = normalizeColumn(test, 1)
+
 n = generate_feature_files(train, "train")
 generate_feature_files(test, "test")
+
+
+accuracy = train_and_eval(train, test, -1, n+1)
+print ("Overall accuracy = ", accuracy)
 
 # Run linear model
 i = 0
