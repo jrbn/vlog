@@ -157,6 +157,8 @@ args = parse_args()
 train = args.train_data
 test = args.test_data
 
+original_train = train
+
 train_normalized = normalizeColumn(train, 0)
 test_normalized = normalizeColumn(test, 0)
 
@@ -180,7 +182,8 @@ while i < n-1:
     # Parse output and get the accuracy
     i += 1
 
-with open('ablation-result.csv', 'w') as fout:
+ablationFileName = os.path.splitext(original_train)[0] + "-ablation-result.csv"
+with open(ablationFileName, 'w') as fout:
     fout.write("Feature Accuracy\n")
     fout.write(histogramData)
 
