@@ -851,16 +851,13 @@ std::vector<std::vector<uint64_t>> Reasoner::getRandomEDBTuples(Literal &query, 
     for (int i = 0; i < maxTuples; ++i) {
         uint64_t rowNumber = (rand() % nRows);
         std::vector<uint64_t> tuple;
-        std::cout << rowNumber << " : ";
         for (int j = 0; j < nVars; ++j) {
             char supportText[MAX_TERM_SIZE];
             uint64_t value = table->getPosAtRow(rowNumber, j);
             tuple.push_back(value);
             edb.getDictText(value, supportText);
-            std::cout << supportText << " ";
         }
         output.push_back(tuple);
-        std::cout << std::endl;
     }
     return output;
 }

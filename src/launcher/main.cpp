@@ -507,10 +507,6 @@ std::vector<std::string> generateTrainingQueries(int argc,
     for (int i = 0; i < ids.size(); ++i) {
         int neighbours = graph[ids[i]].size();
         BOOST_LOG_TRIVIAL(info) << +ids[i] << " : ";
-        int temp = ids[i];
-        if (temp == 0) {
-            cout << "gotcha! " << temp <<  " i = " << i << " ids size : " << ids.size() << std::endl;
-        }
         if (!p.isPredicateIDB(ids[i])) {
             //std::cout << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
             Predicate edbPred = p.getPredicate(ids[i]);
@@ -1197,7 +1193,9 @@ int main(int argc, const char** argv) {
         std::string trainingFileName = fs::path(rulesFile).stem().string();
         trainingFileName += "-training.csv";
         std::ofstream csvFile(trainingFileName);
-        std::ofstream magicSetQueriesLog("magicSetQueries.log");
+        std::string magicQueriesFileName(trainingFileName);
+        magicQueriesFileName += "-magicQueries.log";
+        std::ofstream magicSetQueriesLog(magicQueriesFileName);
         start = timens::system_clock::now();
         for (int i = 0; i < nQueries; ++i) {
             vector<double> data;
@@ -1209,6 +1207,7 @@ int main(int argc, const char** argv) {
             Literal literal = p.parseLiteral(query);
             Metrics m;
             reasoner.getMetrics(literal, NULL, NULL, *layer, p, m, maxDepth);
+
             std::string algorithm = "qsqr";
             std::string newCommand(argv[0]);
             char *const args [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
@@ -1239,6 +1238,7 @@ int main(int argc, const char** argv) {
             if (qsqrTime == magicTime) {
                 BOOST_LOG_TRIVIAL(info) << query << " timed out for both algorithms. Prefering Magic sets..." << endl;
             }
+
             if (winnerAlgo == "MAGIC") {
                 magicSetQueriesLog << query << ", "
                 << m.cost << ", " << m.estimate << ", " << m.countRules << ", " << m.countUniqueRules << ","
