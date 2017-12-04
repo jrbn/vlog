@@ -1,6 +1,6 @@
 Feature Accuracy
-F_{1} 0.76
-F_{2} 0.76
-F_{3} 0.76
-F_{4} 0.76
-F_{5} 0.76
+cost 0.7612612612612613
+estimate 0.8333333333333334
+countRules 0.7702702702702703
+countUniqueRules 0.7612612612612613
+countQueries 0.7612612612612613

@@ -176,7 +176,8 @@ while i < n-1:
     train = 'feature-'+ 'train' + str(i+1) + '.csv'
     test = 'feature-' + 'test' + str(i+1) + '.csv'
 
-    accuracy = train_and_eval(train_normalized, test_normalized, i, n)
+    #accuracy = train_and_eval(train_normalized, test_normalized, i, n)
+    accuracy = train_and_eval(train, test, i, n)
     print ("#### without feature  (", i+1, ")" , COLUMNS[i], ": accuracy = ", accuracy )
     histogramData += COLUMNS[i] + " " + str(accuracy) + "\n"
     # Parse output and get the accuracy
