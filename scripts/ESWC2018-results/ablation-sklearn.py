@@ -2,7 +2,6 @@ import argparse
 import copy
 import os
 from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
-from patsy import dmatrices
 from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
