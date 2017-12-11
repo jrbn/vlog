@@ -82,7 +82,7 @@ def findTimings(statsFile, predFile):
     typewiseFile = os.path.splitext(statsFile)[0] + "-typewise-accuracy.csv"
     with open(typewiseFile, "w") as fout:
         fout.write(data)
-    print ("Total QSQR time = ", round(totalQsqrTime, 3))
+    print ("Total QSQR time  = ", round(totalQsqrTime, 3))
     print ("Total Magic time = ", round(totalMagicTime, 3))
     return totalTime
 
@@ -90,4 +90,4 @@ args = parse_args()
 statsFile = args.statsFile
 predFile = args.predFile
 time = findTimings(statsFile, predFile)
-print ("Total online time ", round(time, 3) )
+print ("Total online time= ", round(time, 3) )
