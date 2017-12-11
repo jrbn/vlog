@@ -1,9 +1,11 @@
 #!/usr/bin/gnuplot
 
 set term postscript eps enhanced color font ",30"
-set output ARG1.'.eps'
 
 datafile = ARG1
+outfile = system('echo '.datafile.' | cut -d. -f1')
+outfile = outfile.'.eps'
+set output outfile
 firstrow = system('head -1 '.datafile)
 
 #set title ARG1
