@@ -13,6 +13,24 @@ def parse_args():
     return parser.parse_args()
 
 
+queryTypeMap = {
+    1:"M_{1}",
+    2:"M_{2}",
+    3:"M_{3}",
+    4:"M_{4}",
+    50:"M_{4}",
+    101:"G_{1}",
+    102:"G_{2}",
+    103:"G_{3}",
+    104:"G_{4}",
+    150:"G_{4}",
+    1001:"B_{1}",
+    1002:"B_{2}",
+    1003:"B_{3}",
+    1004:"B_{4}",
+    1050:"B_{4}"
+    }
+
 def findTimings(statsFile, predFile):
     with open(predFile, 'r') as fin:
         predictions = fin.readlines()
@@ -30,7 +48,7 @@ def findTimings(statsFile, predFile):
             return
         for i, stat in enumerate(stats):
             columns = stat.split()
-            queryType = int(columns[1])
+            queryType = queryTypeMap[int(columns[1])]
             queryTypes.add(queryType)
             qsqrTime = float(columns[2])
             magicTime = float(columns[3])
@@ -55,9 +73,11 @@ def findTimings(statsFile, predFile):
                 totalTime += qsqrTime
             elif (predicted == '0.0'):
                 totalTime += magicTime
-    data = ""
-    for qt in queryTypes:
-        data += str(qt) + " " + str(round(float(queryTypeCorrectCount[qt]) / float(queryTypeCount[qt]), 2)) +  "\n"
+    data = "QueryType Accuracy\n"
+
+    for qt in queryTypeMap.keys():
+        if (queryTypeMap[qt] in queryTypeCount):
+            data += queryTypeMap[qt] + " " + str(round(float(queryTypeCorrectCount[queryTypeMap[qt]]) / float(queryTypeCount[queryTypeMap[qt]]), 2)) +  "\n"
 
     typewiseFile = os.path.splitext(statsFile)[0] + "-typewise-accuracy.csv"
     with open(typewiseFile, "w") as fout:
