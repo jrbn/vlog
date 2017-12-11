@@ -57,17 +57,17 @@ def findTimings(statsFile, predFile):
                 totalTime += magicTime
     data = ""
     for qt in queryTypes:
-        data += str(qt) + " " + str(float(queryTypeCorrectCount[qt]) / float(queryTypeCount[qt])) +  "\n"
+        data += str(qt) + " " + str(round(float(queryTypeCorrectCount[qt]) / float(queryTypeCount[qt]), 2)) +  "\n"
 
     typewiseFile = os.path.splitext(statsFile)[0] + "-typewise-accuracy.csv"
     with open(typewiseFile, "w") as fout:
         fout.write(data)
-    print ("Total QSQR time = ", totalQsqrTime)
-    print ("Total Magic time = ", totalMagicTime)
+    print ("Total QSQR time = ", round(totalQsqrTime, 3))
+    print ("Total Magic time = ", round(totalMagicTime, 3))
     return totalTime
 
 args = parse_args()
 statsFile = args.statsFile
 predFile = args.predFile
 time = findTimings(statsFile, predFile)
-print ("Time taken to solve with online prediction : ", time )
+print ("Total online time ", round(time, 3) )

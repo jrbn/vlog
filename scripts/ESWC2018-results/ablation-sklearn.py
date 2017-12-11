@@ -44,23 +44,42 @@ def train_and_eval(train_file, test_file, columns):
     std_clf.fit(X_train, Y_train)
     pred_test = std_clf.predict(X_test)
     #print ("Cross validation score : ", cross_val_score(LogisticRegression(), X, Y).mean())
-    return metrics.accuracy_score(Y_test, pred_test)
+    return pred_test, metrics.accuracy_score(Y_test, pred_test)
 
 
 args = parse_args()
 train = args.train_data
 test = args.test_data
 
-accuracy = train_and_eval(train, test, [0,1,2,3,4])
+predictions, accuracy = train_and_eval(train, test, [0,1,2,3,4])
 print ("Overall accuracy = ", accuracy)
 
-accuracy = train_and_eval(train, test, [1,2,3,4])
+predictionsFile = os.path.splitext(test)[0] + "-predictions.log"
+predString = ""
+for p in predictions:
+    predString += str(float(p)) + "\n"
+with open(predictionsFile, 'w') as fout:
+    fout.write(predString)
+
+
+histogramData = ""
+predictions, accuracy = train_and_eval(train, test, [1,2,3,4])
+histogramData += "F1 " + str(round(accuracy, 3)) + "\n"
 print ("accuracy removing feature 0 = ", accuracy)
-accuracy = train_and_eval(train, test, [0,2,3,4])
+predictions, accuracy = train_and_eval(train, test, [0,2,3,4])
+histogramData += "F2 " + str(round(accuracy, 3)) + "\n"
 print ("accuracy removing feature 1 = ", accuracy)
-accuracy = train_and_eval(train, test, [0,1,3,4])
+predictions, accuracy = train_and_eval(train, test, [0,1,3,4])
+histogramData += "F3 " + str(round(accuracy, 3)) + "\n"
 print ("accuracy removing feature 2 = ", accuracy)
-accuracy = train_and_eval(train, test, [0,1,2,4])
+predictions, accuracy = train_and_eval(train, test, [0,1,2,4])
+histogramData += "F4 " + str(round(accuracy, 3)) + "\n"
 print ("accuracy removing feature 3 = ", accuracy)
-accuracy = train_and_eval(train, test, [0,1,2,3])
+predictions, accuracy = train_and_eval(train, test, [0,1,2,3])
+histogramData += "F5 " + str(round(accuracy, 3)) + "\n"
 print ("accuracy removing feature 4 = ", accuracy)
+
+ablationFileName = os.path.splitext(train)[0] + "-ablation-result.csv"
+with open(ablationFileName, 'w') as fout:
+    fout.write("Feature Accuracy\n")
+    fout.write(histogramData)

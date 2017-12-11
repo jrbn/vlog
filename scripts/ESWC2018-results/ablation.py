@@ -5,6 +5,7 @@ from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
 from patsy import dmatrices
 from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
+from sklearn import preprocessing
 import pandas as pd
 import numpy as np
 
@@ -64,7 +65,7 @@ def train_and_eval(train_file, test_file, delColumn, n):
 
     #y,X = dmatrices ('algorithm ~ subjectBound + objectBound + numberOfResults + \
     #numberOfRules + numberOfQueries + numberOfUniqueRules', df_train, return_type = "dataframe")
-    #print("#### : ", dmatString)
+    print("#### : ", dmatString)
     y, X = dmatrices(dmatString, df_train, return_type = "dataframe")
     y = np.ravel(y)
     model = LogisticRegression()
@@ -78,7 +79,7 @@ def train_and_eval(train_file, test_file, delColumn, n):
 
     TP, FP, TN, FN = perf_measures(list(yTest.values), list(predicted))
 
-    if delColumn < 0: # If this is estimation with all features, print predictions
+    if delColumn < 0: # If this is estimation with all features, log predictions
         predictionsFile = os.path.splitext(test_file)[0] + "-predictions.log"
         predictions = ""
         for p in list(predicted):
@@ -95,7 +96,7 @@ def train_and_eval(train_file, test_file, delColumn, n):
     print("Accuracy = ", f1score)
     return f1score
 
-def normalizeColumn(fileName, column):
+def normalizeColumn(fileName, phase, column):
     #TODO: This file normalizes the said column from the file
     # and returns the new file
     xTemp = []
@@ -125,7 +126,7 @@ def normalizeColumn(fileName, column):
                 if i < cntColumns-1:
                     newRecords += ","
 
-    newFileName = os.path.splitext(fileName)[0] + "-normalized.csv"
+    newFileName = phase + "-normalized.csv"
     with open(newFileName, 'w') as fout:
         fout.write(newRecords)
     return newFileName
@@ -159,9 +160,23 @@ train = args.train_data
 test = args.test_data
 
 original_train = train
+original_test = test
+#train_normalized = train
+#test_normalized = test
+train_normalized = normalizeColumn(train, "train", 0)
+test_normalized = normalizeColumn(test, "test", 0)
 
-train_normalized = normalizeColumn(train, 0)
-test_normalized = normalizeColumn(test, 0)
+#train_normalized = normalizeColumn(train_normalized, "train", 1)
+#test_normalized = normalizeColumn(test_normalized, "test", 1)
+
+#train_normalized = normalizeColumn(train_normalized, "train", 2)
+#test_normalized = normalizeColumn(test_normalized, "test", 2)
+
+#train_normalized = normalizeColumn(train_normalized, "train", 3)
+#test_normalized = normalizeColumn(test_normalized, "test", 3)
+
+#train_normalized = normalizeColumn(train_normalized, "train", 4)
+#test_normalized = normalizeColumn(test_normalized, "test", 4)
 
 n = generate_feature_files(train_normalized, "train")
 generate_feature_files(test_normalized, "test")
@@ -177,7 +192,6 @@ while i < n-1:
     train = 'feature-'+ 'train' + str(i+1) + '.csv'
     test = 'feature-' + 'test' + str(i+1) + '.csv'
 
-    #accuracy = train_and_eval(train_normalized, test_normalized, i, n)
     accuracy = train_and_eval(train, test, i, n)
     print ("#### without feature  (", i+1, ")" , COLUMNS[i], ": accuracy = ", accuracy )
     histogramData += COLUMNS[i] + " " + str(accuracy) + "\n"
@@ -195,5 +209,8 @@ while i < n-1:
     os.remove('feature-'+ 'train' + str(i+1) + '.csv')
     os.remove('feature-'+ 'test' + str(i+1) + '.csv')
     i += 1
-os.remove(train_normalized)
-os.remove(test_normalized)
+
+if train_normalized != original_train:
+    os.remove(train_normalized)
+if test_normalized != original_test:
+    os.remove(test_normalized)
