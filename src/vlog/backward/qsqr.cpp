@@ -141,7 +141,7 @@ size_t QSQR::estimate(int depth, Predicate &pred, BindingsTable *inputTable/*, s
     countIntQueries++;
     createRules(pred);
     std::vector<size_t> outputs;
-    size_t output = 0; 
+    size_t output = 0;
     for (int i = 0; i < program->getAllRulesByPredicate(pred.getId())->size(); ++i) {
         RuleExecutor *exec = rules[pred.getId()][pred.getAdornment()][i];
         size_t r = exec->estimate(depth - 1, inputTable/*, offsetInput*/, this, layer,i, countRules, countIntQueries,execRules);

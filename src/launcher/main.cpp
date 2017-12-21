@@ -960,8 +960,8 @@ void runLiteralQuery(EDBLayer &edb, Program &p, Literal &literal, Reasoner &reas
         BOOST_LOG_TRIVIAL(info) << "Query: " << literal.tostring(&p, &edb) << " Vector: "
         << m.cost << ", " << m.estimate << ", " << m.countRules << ", "
         << m.countUniqueRules << ", "
-        << m.countIntermediateQueries;
-        //<< ", " << +m.boundedness;
+        << m.countIntermediateQueries
+        << ", " << m.countIDBPredicates;
         if (algo == "both") {
             double t2 = runAlgo("magic", literal, edb, p, reasoner, vm);
             BOOST_LOG_TRIVIAL(info) << "magic time = " << t2;
@@ -1243,15 +1243,15 @@ int main(int argc, const char** argv) {
                 magicSetQueriesLog << query << ", "
                 << m.cost << ", " << m.estimate << ", " << m.countRules << ", " << m.countUniqueRules << ","
                 << m.countIntermediateQueries << ", " <<
-                +m.boundedness << ", " << winnerAlgo << " QSQR time = " << qsqrTime << " Magic time = " << magicTime << std::endl;
+                m.countIDBPredicates << ", " << winnerAlgo << " QSQR time = " << qsqrTime << " Magic time = " << magicTime << std::endl;
             }
-            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << " , " << winnerAlgo << std::endl;
+            BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << " , " << m.countIDBPredicates << "," <<  winnerAlgo << std::endl;
             csvFile << m.cost << ", "
             << m.estimate << ", "
             << m.countRules << ", "
             << m.countUniqueRules << ","
             << m.countIntermediateQueries << ", "
-            //<< +m.boundedness << ", "
+            << m.countIDBPredicates << ", "
             << winnerAlgo << std::endl;
 
             data.push_back(m.cost);
