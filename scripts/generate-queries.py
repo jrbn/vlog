@@ -132,7 +132,7 @@ def runQueryWithAlgo(q, algo, startString, endString, maxTime):
     return time
 
 '''
-This function takses the queries dictionary has the input.
+This function takes the queries dictionary as the input.
 Query type is the key and list of queries of that type is the value.
 '''
 def runQueries(queries):
