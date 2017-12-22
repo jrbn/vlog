@@ -401,10 +401,18 @@ std::string makeGenericQuery(Program& p, PredId_t predId, uint8_t predCard) {
     return query;
 }
 
-std::string makeComplexQuery(Program& p, Literal& l, vector<Substitution>& sub, EDBLayer& db) {
+typedef enum QueryType{
+    QUERY_TYPE_MIXED = 0,
+    QUERY_TYPE_GENERIC = 100,
+    QUERY_TYPE_BOOLEAN = 1000
+    }QueryType;
+
+std::pair<std::string, int> makeComplexQuery(Program& p, Literal& l, vector<Substitution>& sub, EDBLayer& db) {
     std::string query = p.getPredicateName(l.getPredicate().getId());
     int card = l.getPredicate().getCardinality();
     query += "(";
+    QueryType queryType;
+    int countConst = 0;
     for (int i = 0; i < card; ++i) {
         std::string canV = "V" + to_string(i+1);
         uint8_t id = p.getIDVar(canV);
@@ -415,6 +423,7 @@ std::string makeComplexQuery(Program& p, Literal& l, vector<Substitution>& sub, 
                 db.getDictText(sub[j].destination.getValue(), supportText);
                 query += supportText;
                 found = true;
+                countConst++;
             }
         }
         if (!found) {
@@ -425,7 +434,15 @@ std::string makeComplexQuery(Program& p, Literal& l, vector<Substitution>& sub, 
         }
     }
     query += ")";
-    return query;
+
+    if (countConst == card) {
+        queryType = QUERY_TYPE_BOOLEAN;
+    } else if (countConst == 0) {
+        queryType = QUERY_TYPE_GENERIC;
+    } else {
+        queryType = QUERY_TYPE_MIXED;
+    }
+    return std::make_pair(query, queryType);
 }
 
 template <typename Generic>
@@ -445,14 +462,14 @@ std::vector<std::vector<Generic>> powerset(std::vector<Generic>& set) {
     return output;
 }
 
-std::vector<std::string> generateTrainingQueries(int argc,
+std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
         const char** argv,
         EDBLayer &db,
         Program &p,
         std::vector<uint8_t>& vt,
         po::variables_map &vm
         ) {
-    std::set<string> allQueries;
+    std::set<std::pair<string, int>> allQueries;
 
     typedef std::pair<PredId_t, vector<Substitution>> EndpointWithEdge;
     typedef std::unordered_map<uint16_t, std::vector<EndpointWithEdge>> Graph;
@@ -530,13 +547,11 @@ std::vector<std::string> generateTrainingQueries(int argc,
                 for (int l = 0; l < options.size(); ++l) {
                     // options[l] is a set of substitutions
                     // Working variables
-                    int n = vm["depth"].as<unsigned int>();
+                    int depth = vm["depth"].as<unsigned int>();
                     vector<Substitution> sigma = options[l];
                     PredId_t predId = edbPred.getId();
-                    // TODO: maintain a bitmap of neighbours
-                    // Keep track of which neighbours are chosen as random neighbours
-                    // and mark them. Don't use the same edge again
-                    while (n != 0) {
+                    int n = 1;
+                    while (n != depth+1) {
                         // Choose a random arc
                         uint32_t nNeighbours = graph[predId].size();
                         if (!nNeighbours) {
@@ -551,24 +566,23 @@ std::vector<std::string> generateTrainingQueries(int argc,
                         std::string qQuery = makeGenericQuery(p, qId, qCard);
                         Literal qLiteral = p.parseLiteral(qQuery);
                         allPredicatesLog << p.getPredicateName(qId) << std::endl;
-                        std::string qFinalQuery = makeComplexQuery(p, qLiteral, result, db);
-                        allQueries.insert(qFinalQuery);
-
-                        // Remove the arc after it was chosen
-                        //graph[predId].erase(graph[predId].begin() + randomNeighbour);
+                        std::pair<string, int> finalQueryResult = makeComplexQuery(p, qLiteral, result, db);
+                        std::string qFinalQuery = finalQueryResult.first;
+                        int type = finalQueryResult.second + (n > 4) ? 4 : n;
+                        allQueries.insert(std::make_pair(qFinalQuery, type));
 
                         predId = qId;
                         sigma = result;
-                        --n;
+                        n++;
                     }
                 }
             }
         }
     }
     allPredicatesLog.close();
-    std::vector<std::string> queries;
-    for (std::set<std::string>::iterator it = allQueries.begin(); it !=  allQueries.end(); ++it) {
-        queries.push_back(*it);
+    std::vector<std::pair<std::string,int>> queries;
+    for (std::set<std::pair<std::string,int>>::iterator it = allQueries.begin(); it !=  allQueries.end(); ++it) {
+        queries.push_back(std::make_pair(it->first, it->second));
     }
     return queries;
 }
@@ -1180,7 +1194,7 @@ int main(int argc, const char** argv) {
         vt.push_back(vt4);
         p.readFromFile(vm["rules"].as<string>());
         timens::system_clock::time_point start = timens::system_clock::now();
-        std::vector<std::string> trainingQueries = generateTrainingQueries(argc, argv, *layer, p, vt, vm);
+        std::vector<std::pair<std::string,int>> trainingQueries = generateTrainingQueries(argc, argv, *layer, p, vt, vm);
         boost::chrono::duration<double> sec = boost::chrono::system_clock::now()- start;
         int nQueries = trainingQueries.size();
         BOOST_LOG_TRIVIAL(info) << nQueries << " queries generated in " << sec.count() << " seconds";
@@ -1193,17 +1207,27 @@ int main(int argc, const char** argv) {
         std::string trainingFileName = fs::path(rulesFile).stem().string();
         trainingFileName += "-training.csv";
         std::ofstream csvFile(trainingFileName);
+
+        std::string genericQueriesTrainingFileName = fs::path(rulesFile).stem().string();
+        genericQueriesTrainingFileName += "-genTraining.csv";
+        std::ofstream csvGenTraining(genericQueriesTrainingFileName);
+
         std::string magicQueriesFileName(trainingFileName);
         magicQueriesFileName += "-magicQueries.log";
         std::ofstream magicSetQueriesLog(magicQueriesFileName);
+
+        std::string allQueriesFileName(trainingFileName);
+        allQueriesFileName += "-allQueries.log";
+        std::ofstream allQueriesLog(allQueriesFileName);
         start = timens::system_clock::now();
         for (int i = 0; i < nQueries; ++i) {
             vector<double> data;
             int label;
             int timeout = vm["timeoutLiteral"].as<int>();
             BOOST_LOG_TRIVIAL(info) << i << "/" << nQueries;
-            BOOST_LOG_TRIVIAL(info) << "Query : " << trainingQueries[i];
-            std::string query = trainingQueries[i];
+            BOOST_LOG_TRIVIAL(info) << "Query : " << trainingQueries[i].first;
+            std::string query = trainingQueries[i].first;
+            int queryType = trainingQueries[i].second;
             Literal literal = p.parseLiteral(query);
             Metrics m;
             reasoner.getMetrics(literal, NULL, NULL, *layer, p, m, maxDepth);
@@ -1236,7 +1260,8 @@ int main(int argc, const char** argv) {
                 winnerAlgo = "QSQR";
             }
             if (qsqrTime == magicTime) {
-                BOOST_LOG_TRIVIAL(info) << query << " timed out for both algorithms. Prefering Magic sets..." << endl;
+                BOOST_LOG_TRIVIAL(info) << query << " timed out for both algorithms. Skipping from the training set..." << endl;
+                continue;
             }
 
             if (winnerAlgo == "MAGIC") {
@@ -1246,13 +1271,20 @@ int main(int argc, const char** argv) {
                 m.countIDBPredicates << ", " << winnerAlgo << " QSQR time = " << qsqrTime << " Magic time = " << magicTime << std::endl;
             }
             BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << " , " << m.countIDBPredicates << "," <<  winnerAlgo << std::endl;
-            csvFile << m.cost << ", "
-            << m.estimate << ", "
-            << m.countRules << ", "
-            << m.countUniqueRules << ","
-            << m.countIntermediateQueries << ", "
-            << m.countIDBPredicates << ", "
-            << winnerAlgo << std::endl;
+            if (queryType < 101 || queryType > 104) {
+                csvFile << m.cost << ", "
+                << m.estimate << ", "
+                << m.countRules << ", "
+                << m.countUniqueRules << ","
+                << m.countIntermediateQueries << ", "
+                << m.countIDBPredicates << ", "
+                << winnerAlgo << std::endl;
+            }
+
+            allQueriesLog << query << ", "
+            << m.cost << ", " << m.estimate << ", " << m.countRules << ", " << m.countUniqueRules << ","
+            << m.countIntermediateQueries << ", " <<
+            m.countIDBPredicates << ", " << winnerAlgo << ",QSQR time = " << qsqrTime << ",Magic time = " << magicTime << std::endl;
 
             data.push_back(m.cost);
             data.push_back(m.estimate);
@@ -1273,17 +1305,22 @@ int main(int argc, const char** argv) {
         }
         magicSetQueriesLog.close();
 
+        if (allQueriesLog.fail()) {
+            BOOST_LOG_TRIVIAL(error) << "Error writing to the queries log file";
+        }
+        allQueriesLog.close();
+
         boost::chrono::duration<double> secData = boost::chrono::system_clock::now() - start;
         BOOST_LOG_TRIVIAL(info) << nQueries << " queries's training data is generated in " << secData.count() << " seconds";
 
         // Train with LogisticRegression object' train() method
-        start = timens::system_clock::now();
-        LogisticRegression lr(5);
-        lr.train(dataset);
-        boost::chrono::duration<double> secTraining = boost::chrono::system_clock::now() - start;
-        BOOST_LOG_TRIVIAL(info) << nQueries << " queries are trained with LR in " << secTraining.count() << " seconds";
-        vector<double> x = {2, 1, 1, 0, 1};
-        std::cout << "test classification = " << lr.classify(x)<< std::endl;
+        //start = timens::system_clock::now();
+        //LogisticRegression lr(5);
+        //lr.train(dataset);
+        //boost::chrono::duration<double> secTraining = boost::chrono::system_clock::now() - start;
+        //BOOST_LOG_TRIVIAL(info) << nQueries << " queries are trained with LR in " << secTraining.count() << " seconds";
+        //vector<double> x = {2, 1, 1, 0, 1};
+        //std::cout << "test classification = " << lr.classify(x)<< std::endl;
         delete layer;
     } else if (cmd == "load") {
         Loader *loader = new Loader();

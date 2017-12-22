@@ -433,8 +433,6 @@ public:
 
     static std::string compressRDFOWLConstants(std::string input);
 
-    uint8_t getBoundedness(Literal &);
-
     ~Program() {
     }
 };
