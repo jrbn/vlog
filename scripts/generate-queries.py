@@ -27,13 +27,16 @@ def generateQueries(rule, arity, resultRecords):
             query += ","
     query += ")"
 
-    if (len(resultRecords) > 4):
-        if (150 in queries):
-            queries[150].append(query)
+    stepsMaterialization = len(resultRecords)
+
+    if (stepsMaterialization > 3):
+        print ("# of Materialization steps for predicate - ", rule , " : ", stepsMaterialization)
+        if (104 in queries):
+            queries[104].append(query)
         else:
-            queries[150] = [query]
+            queries[104] = [query]
     else:
-        queries[100+(len(resultRecords))] = [query]
+        queries[100+stepsMaterialization] = [query]
 
     countQueries += 1
     # Queries by replacing each variable by a constant
@@ -62,12 +65,12 @@ def generateQueries(rule, arity, resultRecords):
 
                     # Fix the number of types
                     # If step count is >3, write 50 as the query type
-                    if (i > 3):
-                        if 50 in queries:
-                            queries[50].append(query)
+                    if (i > 2):
+                        if 4 in queries:
+                            queries[4].append(query)
                             countQueries += 1
                         else:
-                            queries[50] = [query]
+                            queries[4] = [query]
                             countQueries += 1
                     else:
                         if (i+1 in queries):
@@ -88,12 +91,12 @@ def generateQueries(rule, arity, resultRecords):
                     if (j != len(record) -1):
                         query += ","
                 query += ")"
-                if (i > 3):
-                    if (1050 in queries):
-                        queries[1050].append(query)
+                if (i > 2):
+                    if (1004 in queries):
+                        queries[1004].append(query)
                         countQueries += 1
                     else:
-                        queries[1050] = [query]
+                        queries[1004] = [query]
                         countQueries += 1
                 else:
                     if (1000+i+1 in queries):
@@ -135,8 +138,11 @@ Query type is the key and list of queries of that type is the value.
 def runQueries(queries):
     data = ""
     queryStats = ""
+    timedOutQueryStats = ""
     featureString = ""
+    genericQueryFeatureString = ""
     global numQueries
+    global globalMagicWon
     for queryType in queries.keys():
         print ("Running queries of type : ", queryType)
         uniqueQueries = list(set(queries[queryType]))
@@ -149,6 +155,7 @@ def runQueries(queries):
             print ("Iteration #", iterations, " : " , q)
             # Here invoke vlog and execute query and get the runtime
             workingTimeout = ARG_TIMEOUT
+            winnerAlgorithm = "QSQR"
             timeQsqr = runQueryWithAlgo(q, "qsqr", STR_time, "msec", workingTimeout)
             if (float(timeQsqr) / 1000) + 1 < workingTimeout:
                 workingTimeout = (float(timeQsqr)/1000)+1
@@ -156,46 +163,60 @@ def runQueries(queries):
             vector_str = runQueryWithAlgo(q, "onlyMetrics", STR_vector, "\\n", ARG_TIMEOUT)
             vector = vector_str.split(',')
 
-            if timeQsqr == timeMagic: #Means both timed out
-                print (" timed out ")
-                timeoutCount += 1
-                if timeoutCount > 10:
-                    break
-
-            numQueries += 1
-            if float(timeQsqr) < float(timeMagic):
-                winnerAlgorithm = "QSQR"
-            else:
+            if float(timeMagic) < float(timeQsqr):
                 winnerAlgorithm = "MAGIC"
 
             allFeatures = []
             for v in vector:
                 allFeatures.append(v)
-            #allFeatures.append(numResults)
             allFeatures.append(winnerAlgorithm)
+
+            if timeQsqr == timeMagic: #Means both timed out
+                print (" timed out ")
+                timeoutCount += 1
+                if timeoutCount > 10:
+                    break
+                else:
+                    recordTimedout += str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
+                    timedOutQueryStats += recordTimedout + "\n"
+                    print("##### !!!! : ", recordTimedout)
+                    continue
+
+            numQueries += 1
 
             if float(timeQsqr) < float(timeMagic):
                 cntQSQRWon += 1
             else:
                 cntMagicWon += 1
+                globalMagicWon += 1
 
             record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
             queryStats += record + "\n"
             print (record)
 
-            featureRecord = ""
-            for i, a in enumerate(allFeatures):
-                featureRecord += str(a)
-                if (i != len(allFeatures)-1):
-                    featureRecord += ","
-            featureRecord += "\n"
-            featureString += featureRecord
+            if (queryType >= 101 and queryType <= 104):
+                genericQueryFeatureRecord = ""
+                for i,a in enumerate(allFeatures):
+                    genericQueryFeatureRecord += str(a)
+                    if (i != len(allFeatures)-1):
+                        genericQueryFeatureRecord += ","
+                genericQueryFeatureRecord += "\n"
+                genericQueryFeatureString += genericQueryFeatureRecord
+            else:
+                featureRecord = ""
+                for i, a in enumerate(allFeatures):
+                    featureRecord += str(a)
+                    if (i != len(allFeatures)-1):
+                        featureRecord += ","
+                featureRecord += "\n"
+                featureString += featureRecord
 
             iterations += 1
             #TODO: generate all the possible queries
             if iterations == ARG_NQ:
+                print ("Query Type : ", queryType , " # Global magic set queries = ", globalMagicWon)
                 break
-        # Here we are out of outer loop (of query types)
+        # Here we are out of inner for loop
         # We have counts of qsqr and magic sets
         data += str(queryType) + " " + str(cntQSQRWon) + " " + str(cntMagicWon) + "\n"
 
@@ -204,6 +225,8 @@ def runQueries(queries):
         fout.write(data)
     with open(outFile + '.features', 'a') as fout:
         fout.write(featureString)
+    with open(outFile + '.gen.features', 'a') as fout:
+        fout.write(genericQueryFeatureString)
     with open(outFile + '.query.stats', 'w') as fout:
         fout.write(queryStats)
 
@@ -228,7 +251,7 @@ def parseResultFile(name, resultFile):
     arity = 0
     with open(resultFile, 'r') as fin:
         lines = fin.readlines()
-        # If file is too big, then randomly sample 10K records
+        # If file is too big, then randomly sample 5K records
         if isFileTooBig(resultFile):
             lines = random.sample(lines, ARG_SAMPLE)
 
@@ -244,7 +267,7 @@ def parseResultFile(name, resultFile):
         results[int(columns[0])].append(operands)
 
     nQueries = generateQueries(name, arity, results)
-    print (nQueries , " queries generated.")
+    print (nQueries , " queries generated for predicate ", name)
 
 '''
 Takes rule file and rule names array as the input
@@ -293,6 +316,9 @@ with open(outFile, 'w') as fout:
 with open(outFile + '.features', 'w') as fout:
     fout.write("")
 
+with open(outFile + '.gen.features', 'w') as fout:
+    fout.write("")
+
 rulesWithResult = dict()
 matDir = args.mat
 for root, dirs, files in os.walk(os.path.abspath(matDir)):
@@ -305,6 +331,7 @@ for root, dirs, files in os.walk(os.path.abspath(matDir)):
 
 queries = {}
 numQueries = 0
+globalMagicWon = 0
 start = time.time()
 parseRulesFile(rulesFile, rulesWithResult)
 runQueries(queries)
