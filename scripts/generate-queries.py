@@ -143,6 +143,10 @@ def runQueries(queries):
     genericQueryFeatureString = ""
     global numQueries
     global globalMagicWon
+    global foutTypes
+    global foutFeatures
+    global foutGenFeatures
+    global foutQueryStats
     for queryType in queries.keys():
         print ("Running queries of type : ", queryType)
         uniqueQueries = list(set(queries[queryType]))
@@ -177,7 +181,7 @@ def runQueries(queries):
                 if timeoutCount > 10:
                     break
                 else:
-                    recordTimedout += str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
+                    recordTimedout = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
                     timedOutQueryStats += recordTimedout + "\n"
                     print("##### !!!! : ", recordTimedout)
                     continue
@@ -191,7 +195,8 @@ def runQueries(queries):
                 globalMagicWon += 1
 
             record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
-            queryStats += record + "\n"
+            foutQueryStats.write(record + "\n")
+            foutQueryStats.flush()
             print (record)
 
             if (queryType >= 101 and queryType <= 104):
@@ -201,7 +206,8 @@ def runQueries(queries):
                     if (i != len(allFeatures)-1):
                         genericQueryFeatureRecord += ","
                 genericQueryFeatureRecord += "\n"
-                genericQueryFeatureString += genericQueryFeatureRecord
+                foutGenFeatures.write(genericQueryFeatureRecord)
+                foutGenFeatures.flush()
             else:
                 featureRecord = ""
                 for i, a in enumerate(allFeatures):
@@ -209,7 +215,8 @@ def runQueries(queries):
                     if (i != len(allFeatures)-1):
                         featureRecord += ","
                 featureRecord += "\n"
-                featureString += featureRecord
+                foutFeatures.write(featureRecord)
+                foutFeatures.flush()
 
             iterations += 1
             #TODO: generate all the possible queries
@@ -218,17 +225,11 @@ def runQueries(queries):
                 break
         # Here we are out of inner for loop
         # We have counts of qsqr and magic sets
-        data += str(queryType) + " " + str(cntQSQRWon) + " " + str(cntMagicWon) + "\n"
+        data = str(queryType) + " " + str(cntQSQRWon) + " " + str(cntMagicWon) + "\n"
+        foutTypes.write(data)
+        foutTypes.flush()
 
 
-    with open(outFile, 'a') as fout:
-        fout.write(data)
-    with open(outFile + '.features', 'a') as fout:
-        fout.write(featureString)
-    with open(outFile + '.gen.features', 'a') as fout:
-        fout.write(genericQueryFeatureString)
-    with open(outFile + '.query.stats', 'w') as fout:
-        fout.write(queryStats)
 
 def blocks(fileObject, size=65536):
     while True:
@@ -310,14 +311,13 @@ ARG_NQ = args.nq
 resultFiles = []
 rulesFile = args.rules
 outFile = args.out
-with open(outFile, 'w') as fout:
-    fout.write("QueryType QSQR MAGIC\n")
 
-with open(outFile + '.features', 'w') as fout:
-    fout.write("")
-
-with open(outFile + '.gen.features', 'w') as fout:
-    fout.write("")
+foutTypes = open(outFile, 'w')
+foutTypes.write("QueryType QSQR MAGIC\n")
+foutTypes.flush()
+foutFeatures = open(outFile + '.features', 'w')
+foutGenFeatures = open(outFile + '.gen.features', 'w')
+foutQueryStats = open(outFile + '.query.stats', 'w')
 
 rulesWithResult = dict()
 matDir = args.mat
@@ -336,4 +336,9 @@ start = time.time()
 parseRulesFile(rulesFile, rulesWithResult)
 runQueries(queries)
 end = time.time()
+
+foutTypes.close()
+foutFeatures.close()
+foutGenFeatures.close()
+foutQueryStats.close()
 print (numQueries, " queries generated in ", (end-start)/60 , " minutes")
