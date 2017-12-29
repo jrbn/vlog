@@ -17,6 +17,7 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <cstring>
 
 long cmpRow(std::vector<uint8_t> *posJoins, const Term_t *row1, const uint64_t *row2) {
     for (int i = 0; i < posJoins->size(); ++i) {
@@ -877,24 +878,53 @@ ReasoningMode Reasoner::chooseMostEfficientAlgo(Literal &query,
     return mode;
 }
 
-std::vector<std::vector<uint64_t>> Reasoner::getRandomEDBTuples(Literal &query, EDBLayer& edb, uint64_t maxTuples) {
+std::vector<std::vector<uint64_t>> Reasoner::getRandomEDBTuples(Literal &query, EDBLayer& edb, uint64_t maxTuples, vector<pair<uint8_t, uint64_t>>& ruleTuple) {
     std::vector<std::vector<uint64_t>> output;
     QSQQuery qsqquery(query);
     int nVars = query.getNVars();
     TupleTable *table = new TupleTable(nVars);
     edb.query(&qsqquery, table, NULL, NULL);
     uint64_t nRows = table->getNRows();
-    vector<uint64_t> rowNumbers(maxTuples);
-    for (int i = 0; i < maxTuples; ++i) {
-        uint64_t rowNumber = (rand() % nRows);
+    BOOST_LOG_TRIVIAL(info) << "$$$ Query " << query.tostring() << " has " << nRows << " rows";
+    // TODO: go sequentially instead of random ? (probably not)
+    int i = 0;
+    //uint64_t rowNumber = (rand() % nRows);
+    uint64_t rowNumber = 0;
+    while(i < maxTuples && ++rowNumber < nRows) {
         std::vector<uint64_t> tuple;
+        std::string tupleString("<");
+        std::string constString("<");
+        bool broke = false;
         for (int j = 0; j < nVars; ++j) {
             char supportText[MAX_TERM_SIZE];
             uint64_t value = table->getPosAtRow(rowNumber, j);
             tuple.push_back(value);
             edb.getDictText(value, supportText);
+            tupleString += supportText;
+            tupleString += " , ";
+
+            char constant[MAX_TERM_SIZE];
+            uint8_t id = ruleTuple.at(j).first;
+            if (id != 0) {
+                value = ruleTuple.at(j).second;
+                edb.getDictText(value, constant);
+                constString += constant;
+                constString += " , ";
+                if (strcmp(supportText, constant)) {
+                    broke = true;
+                    break;
+                }
+            }
         }
-        output.push_back(tuple);
+        tupleString += ">";
+        constString += ">";
+        if (!broke) {
+            BOOST_LOG_TRIVIAL(info) << "Tuple String : " << tupleString;
+            output.push_back(tuple);
+            i++;
+        } else {
+            BOOST_LOG_TRIVIAL(info) << "Tuples " << tupleString << std::endl << " did not match with " << constString;
+        }
     }
     return output;
 }
