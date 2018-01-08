@@ -563,16 +563,18 @@ std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
                     }
                     Predicate temp = body[0].getPredicate();
                     if (!p.isPredicateIDB(temp.getId())){
+                        BOOST_LOG_TRIVIAL(info) << "rule : " << (*it).toprettystring(&p, &db);
+                        BOOST_LOG_TRIVIAL(info) << "Cardinality of body predicate: " << +temp.getCardinality();
                         for (int c = 0; c < temp.getCardinality(); ++c) {
                             ruleTuple.push_back(std::make_pair(body[0].getTermAtPos(c).getId(), body[0].getTermAtPos(c).getValue()));
+                            uint8_t tempid = body[0].getTermAtPos(c).getId();
+                            if(tempid == 0) {
+                                uint64_t tempvalue = body[0].getTermAtPos(c).getValue();
+                                db.getDictText(tempvalue, supportText);
+                                BOOST_LOG_TRIVIAL(info) << "id: " << +tempid << " Constant : " << supportText;
+                            }
                         }
-                        BOOST_LOG_TRIVIAL(info) << "rule : " << (*it).tostring();
-                        BOOST_LOG_TRIVIAL(info) << "body atom : " << body[0].tostring();
-                        uint8_t tempid = body[0].getTermAtPos(1).getId();
-                        assert(tempid != 0);
-                        uint64_t tempvalue = body[0].getTermAtPos(1).getValue();
-                        db.getDictText(tempvalue, supportText);
-                        BOOST_LOG_TRIVIAL(info) << "Relation : " << supportText;
+                        //BOOST_LOG_TRIVIAL(info) << "body atom : " << body[0].tostring();
                         break;
                     }
                 }
@@ -608,7 +610,7 @@ std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
                                 randomNeighbour = a;
                                 sigmaN = graph[predId][a].second;
                             } else {
-                                uint32_t randomNeighbour = rand() % nNeighbours;
+                                randomNeighbour = rand() % nNeighbours;
                                 sigmaN = graph[predId][randomNeighbour].second;
                             }
                             std::vector<Substitution> result = concat(sigmaN, sigma);
