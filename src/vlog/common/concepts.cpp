@@ -38,6 +38,10 @@ uint8_t Literal::getNVars() const {
     return n;
 }
 
+uint8_t Literal::getNConstants() const {
+    return getTupleSize() - getNVars();
+}
+
 std::vector<uint8_t> Literal::getPosVars() const {
     std::vector<uint8_t> out;
     for (uint8_t i = 0; i < tuple.getSize(); ++i) {
@@ -995,6 +999,17 @@ std::vector<PredId_t> Program::getAllPredicateIds() {
     std::vector<std::string> predicateStrings = this->getAllPredicateStrings();
     for (int i = 0; i < predicateStrings.size(); ++i) {
         output.push_back(this->getPredicate(predicateStrings[i]).getId());
+    }
+    return output;
+}
+
+std::vector<PredId_t> Program::getAllEDBPredicateIds() {
+    std::vector<PredId_t> output;
+    std::vector<std::string> predicateStrings = this->getAllPredicateStrings();
+    for (int i = 0; i < predicateStrings.size(); ++i) {
+        if (Predicate::isEDB(predicateStrings[i])) {
+            output.push_back(this->getPredicate(predicateStrings[i]).getId());
+        }
     }
     return output;
 }

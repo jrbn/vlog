@@ -302,7 +302,7 @@ bool initParams(int argc, const char** argv, po::variables_map &vm) {
 
     po::options_description test_options("Options for <test>");
     test_options.add_options()("maxTuples", po::value<unsigned int>()->default_value(100), "Sets the number of tuples to choose from database for an EDB predicate.");
-    test_options.add_options()("depth", po::value<unsigned int>()->default_value(10), "Sets the depth for graph traversal when generating queries.");
+    test_options.add_options()("depth", po::value<unsigned int>()->default_value(5), "Sets the depth for graph traversal when generating queries.");
 
     po::options_description cmdline_options("Parameters");
     cmdline_options.add(query_options).add(lookup_options).add(load_options).add(test_options);
@@ -462,6 +462,44 @@ std::vector<std::vector<Generic>> powerset(std::vector<Generic>& set) {
     return output;
 }
 
+PredId_t getMatchingIDB(EDBLayer& db, Program &p, vector<uint64_t>& tuple) {
+    //Check this tuple with all rules
+    PredId_t idbPredicateId = 65535;
+    vector<Rule> rules = p.getAllRules();
+    vector<Rule>::iterator it = rules.begin();
+    vector<pair<uint8_t, uint64_t>> ruleTuple;
+    for (;it != rules.end(); ++it) {
+        vector<Literal> body = (*it).getBody();
+        if (body.size() > 1) {
+            continue;
+        }
+        uint8_t nConstants = body[0].getNConstants();
+        Predicate temp = body[0].getPredicate();
+        if (!p.isPredicateIDB(temp.getId())){
+            // BOOST_LOG_TRIVIAL(info) << "rule : " << (*it).toprettystring(&p, &db);
+            //BOOST_LOG_TRIVIAL(info) << "Cardinality of body predicate: " << +temp.getCardinality();
+            int matched = 0;
+            for (int c = 0; c < temp.getCardinality(); ++c) {
+                uint8_t tempid = body[0].getTermAtPos(c).getId();
+                if(tempid == 0) {
+                    uint64_t tempvalue = body[0].getTermAtPos(c).getValue();
+                    char supportText[MAX_TERM_SIZE];
+                    db.getDictText(tempvalue, supportText);
+                    if (tempvalue == tuple[c]) {
+                        matched++;
+                        //BOOST_LOG_TRIVIAL(info) << "id: " << +tempid << " Constant : " << supportText;
+                    }
+                }
+            }
+            if (matched == nConstants) {
+                idbPredicateId = (*it).getHead().getPredicate().getId();
+                return idbPredicateId;
+            }
+        }
+    }
+    return idbPredicateId;
+}
+
 std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
         const char** argv,
         EDBLayer &db,
@@ -469,7 +507,7 @@ std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
         std::vector<uint8_t>& vt,
         po::variables_map &vm
         ) {
-    std::set<std::pair<string, int>> allQueries;
+    std::unordered_map<string, int> allQueries;
 
     typedef std::pair<PredId_t, vector<Substitution>> EndpointWithEdge;
     typedef std::unordered_map<uint16_t, std::vector<EndpointWithEdge>> Graph;
@@ -518,20 +556,22 @@ std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
 #endif
 
     // Gather all predicates
-    std::vector<PredId_t> ids = p.getAllPredicateIds();
+    std::vector<PredId_t> ids = p.getAllEDBPredicateIds();
     std::ofstream allPredicatesLog("allPredicatesInQueries.log");
-    unsigned int seed = (unsigned int) ((clock() ^ 413711) % 105503);
     for (int i = 0; i < ids.size(); ++i) {
         int neighbours = graph[ids[i]].size();
         //BOOST_LOG_TRIVIAL(info) << +ids[i] << " : ";
-        if (!p.isPredicateIDB(ids[i])) {
             BOOST_LOG_TRIVIAL(info) << p.getPredicateName(ids[i]) << " is EDB : " << neighbours << "neighbours" <<  endl;
             Predicate edbPred = p.getPredicate(ids[i]);
             int card = edbPred.getCardinality();
             std::string query = makeGenericQuery(p, edbPred.getId(), edbPred.getCardinality());
             Literal literal = p.parseLiteral(query);
-            Reasoner reasoner(vm["reasoningThreshold"].as<long>());
             int nVars = literal.getNVars();
+            QSQQuery qsqQuery(literal);
+            TupleTable *table = new TupleTable(nVars);
+            db.query(&qsqQuery, table, NULL, NULL);
+            uint64_t nRows = table->getNRows();
+            Reasoner reasoner(vm["reasoningThreshold"].as<long>());
             std::vector<std::vector<uint64_t>> output;
             uint64_t maxTuples = vm["maxTuples"].as<unsigned int>();
             /**
@@ -543,100 +583,97 @@ std::vector<std::pair<std::string, int>> generateTrainingQueries(int argc,
              * All EDB tuples should be carefully matched with rules
              * */
             PredId_t predId = edbPred.getId();
-            uint32_t nNeighbours = graph[predId].size();
-            for (int a = 0; a < nNeighbours; ++a) {
-                Predicate pred = p.getPredicate(graph[predId][a].first);
-                std::string predName = p.getPredicateName(graph[predId][a].first);
-                BOOST_LOG_TRIVIAL(info) << "Predicate: " << predName;
-                char supportText[MAX_TERM_SIZE];
-                // find first rule in which this predicate is in head
-                // and there is an EDB predicate in the body
-                // Use that EDB predicate to find random tuples
-                vector<Rule>* rules = p.getAllRulesByPredicate(pred.getId());
-
-                vector<Rule>::iterator it = rules->begin();
-                vector<pair<uint8_t, uint64_t>> ruleTuple;
-                for (;it != rules->end(); ++it) {
-                    vector<Literal> body = (*it).getBody();
-                    if (body.size() > 1) {
-                        continue;
-                    }
-                    Predicate temp = body[0].getPredicate();
-                    if (!p.isPredicateIDB(temp.getId())){
-                        BOOST_LOG_TRIVIAL(info) << "rule : " << (*it).toprettystring(&p, &db);
-                        BOOST_LOG_TRIVIAL(info) << "Cardinality of body predicate: " << +temp.getCardinality();
-                        for (int c = 0; c < temp.getCardinality(); ++c) {
-                            ruleTuple.push_back(std::make_pair(body[0].getTermAtPos(c).getId(), body[0].getTermAtPos(c).getValue()));
-                            uint8_t tempid = body[0].getTermAtPos(c).getId();
-                            if(tempid == 0) {
-                                uint64_t tempvalue = body[0].getTermAtPos(c).getValue();
-                                db.getDictText(tempvalue, supportText);
-                                BOOST_LOG_TRIVIAL(info) << "id: " << +tempid << " Constant : " << supportText;
-                            }
-                        }
-                        //BOOST_LOG_TRIVIAL(info) << "body atom : " << body[0].tostring();
-                        break;
-                    }
+            uint64_t rowNumber = 0;
+            if (maxTuples > nRows) {
+                maxTuples = nRows;
+            }
+            while (rowNumber < maxTuples) {
+                std::vector<uint64_t> tuple;
+                std::string tupleString("<");
+                for (int j = 0; j < nVars; ++j) {
+                    uint64_t value = table->getPosAtRow(rowNumber, j);
+                    tuple.push_back(value);
+                    char supportText[MAX_TERM_SIZE];
+                    db.getDictText(value, supportText);
+                    tupleString += supportText;
+                    tupleString += ",";
                 }
-                assert(0 != strlen(supportText));
-                output = reasoner.getRandomEDBTuples(literal, db, maxTuples, ruleTuple);
+                tupleString += ">";
+                BOOST_LOG_TRIVIAL(info) << "Tuple # " << rowNumber << " : " << tupleString;
+                if (rowNumber == 922) {
+                    BOOST_LOG_TRIVIAL(info) << "wait here";
+                }
+                PredId_t idbPredId = getMatchingIDB(db, p, tuple);
+                if (65535 == idbPredId) {
+                    BOOST_LOG_TRIVIAL(info) << "No rules found";
+                    rowNumber++;
+                    continue;
+                }
+                std::string predName = p.getPredicateName(idbPredId);
+
+                BOOST_LOG_TRIVIAL(info) << tupleString << " ==> " << predName << " : " << +idbPredId;
+                vector<Substitution> subs;
+                for (int k = 0; k < card; ++k) {
+                    subs.push_back(Substitution(vt[k], VTerm(0, tuple[k])));
+                }
+                // Find powerset of subs here
+                std::vector<std::vector<Substitution>> options =  powerset<Substitution>(subs);
+                unsigned int seed = (unsigned int) ((clock() ^ 413711) % 105503);
                 srand(seed);
-                for (int j = 0; j < output.size(); ++j) {
-                    vector<Substitution> subs;
-                    for (int k = 0; k < card; ++k) {
-                        subs.push_back(Substitution(vt[k], VTerm(0, output[j][k])));
-                    }
-
-                    // Find powerset of subs here
-                    std::vector<std::vector<Substitution>> options =  powerset<Substitution>(subs);
-                    for (int l = 0; l < options.size(); ++l) {
-                        // options[l] is a set of substitutions
-                        // Working variables
-                        int depth = vm["depth"].as<unsigned int>();
-                        vector<Substitution> sigma = options[l];
-                        PredId_t predId = edbPred.getId();
-                        int n = 1;
-                        while (n != depth+1) {
-                            // Choose a random arc
-                            uint32_t nNeighbours = graph[predId].size();
-                            if (!nNeighbours) {
-                                // break if there are no more arcs
-                                break;
+                for (int l = 0; l < options.size(); ++l) {
+                    // options[l] is a set of substitutions
+                    // Working variables
+                    int depth = vm["depth"].as<unsigned int>();
+                    vector<Substitution> sigma = options[l];
+                    PredId_t predId = edbPred.getId();
+                    int n = 1;
+                    while (n != depth+1) {
+                        uint32_t nNeighbours = graph[predId].size();
+                        if (0 == nNeighbours) {
+                            break;
+                        }
+                        uint32_t randomNeighbour;
+                        if (1 == n) {
+                            int index = 0;
+                            bool found = false;
+                            for (auto it = graph[predId].begin(); it != graph[predId].end(); ++it,++index) {
+                                if (it->first == idbPredId) {
+                                    randomNeighbour = index;
+                                    found = true;
+                                    break;
+                                }
                             }
-
-                            uint32_t randomNeighbour;
-                            std::vector<Substitution> sigmaN;
-                            if (n == 1) {
-                                randomNeighbour = a;
-                                sigmaN = graph[predId][a].second;
-                            } else {
-                                randomNeighbour = rand() % nNeighbours;
-                                sigmaN = graph[predId][randomNeighbour].second;
-                            }
-                            std::vector<Substitution> result = concat(sigmaN, sigma);
-                            PredId_t qId  = graph[predId][randomNeighbour].first;
-                            uint8_t qCard = p.getPredicate(graph[predId][randomNeighbour].first).getCardinality();
-                            std::string qQuery = makeGenericQuery(p, qId, qCard);
-                            Literal qLiteral = p.parseLiteral(qQuery);
-                            allPredicatesLog << p.getPredicateName(qId) << std::endl;
-                            std::pair<string, int> finalQueryResult = makeComplexQuery(p, qLiteral, result, db);
-                            std::string qFinalQuery = finalQueryResult.first;
-                            int type = finalQueryResult.second + ((n > 4) ? 4 : n);
+                            assert(found == true);
+                        } else {
+                            randomNeighbour = rand() % nNeighbours;
+                        }
+                        std::vector<Substitution>sigmaN = graph[predId][randomNeighbour].second;
+                        std::vector<Substitution> result = concat(sigmaN, sigma);
+                        PredId_t qId  = graph[predId][randomNeighbour].first;
+                        uint8_t qCard = p.getPredicate(graph[predId][randomNeighbour].first).getCardinality();
+                        std::string qQuery = makeGenericQuery(p, qId, qCard);
+                        Literal qLiteral = p.parseLiteral(qQuery);
+                        allPredicatesLog << p.getPredicateName(qId) << std::endl;
+                        std::pair<string, int> finalQueryResult = makeComplexQuery(p, qLiteral, result, db);
+                        std::string qFinalQuery = finalQueryResult.first;
+                        int type = finalQueryResult.second + ((n > 4) ? 4 : n);
+                        if (allQueries.find(qFinalQuery) == allQueries.end()) {
                             allQueries.insert(std::make_pair(qFinalQuery, type));
+                        }
 
-                            predId = qId;
-                            sigma = result;
-                            n++;
-                        } // while the depth of exploration is reached
-                    } // for each partial substitution
-                } // for each random tuple
-            } // for all neighbours of the EDB predicate
-        }// if predicate is EDB
-    } // all predicate ids
+                        predId = qId;
+                        sigma = result;
+                        n++;
+                    } // while the depth of exploration is reached
+                } // for each partial substitution
+                rowNumber++;
+            }
+    } // all EDB predicate ids
     allPredicatesLog.close();
     std::vector<std::pair<std::string,int>> queries;
-    for (std::set<std::pair<std::string,int>>::iterator it = allQueries.begin(); it !=  allQueries.end(); ++it) {
+    for (std::unordered_map<std::string,int>::iterator it = allQueries.begin(); it !=  allQueries.end(); ++it) {
         queries.push_back(std::make_pair(it->first, it->second));
+        BOOST_LOG_TRIVIAL(info) << "Query: " << it->first << " type : " << it->second ;
     }
     return queries;
 }

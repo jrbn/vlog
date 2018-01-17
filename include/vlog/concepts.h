@@ -249,6 +249,8 @@ public:
 
     uint8_t getNVars() const;
 
+    uint8_t getNConstants() const;
+
     uint8_t getNUniqueVars() const;
 
     bool hasRepeatedVars() const;
@@ -424,6 +426,8 @@ public:
     std::vector<std::string> getAllPredicateStrings();
 
     std::vector<PredId_t> getAllPredicateIds();
+
+    std::vector<PredId_t> getAllEDBPredicateIds();
 
     int getNEDBPredicates();
 
