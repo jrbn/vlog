@@ -246,10 +246,13 @@ def isFileTooBig(fileName):
         return True
     return False
 
-def parseResultFile(name, resultFile):
+def parseResultFile(name, resultFile, arity):
     print (name)
     results = defaultdict(list)
-    arity = 0
+    if (arity > 2):
+        print("Not supporting arity > 2")
+        return
+
     with open(resultFile, 'r') as fin:
         lines = fin.readlines()
         # If file is too big, then randomly sample 5K records
@@ -258,7 +261,17 @@ def parseResultFile(name, resultFile):
 
     for line in lines:
         columns = line.split()
-        arity = len(columns) - 1
+        nColumns = len(columns)
+
+        # There are some constants which have space in them
+        # E.g. RP572 of DBpedia is (A, <address of> B)
+        # tuples are : <Heuston station>, "123 pacific way NE, USA "
+        # If we split() it, then we would have more than two columns
+        if (nColumns > arity+1):
+            columns[2] = ' '.join(columns[2:nColumns])
+        # delete the columns that contain parts of constant
+        while (len(columns) != arity+1):
+            del(columns[-1])
         operands = []
         for i, column in enumerate(columns):
             if i == 0:
@@ -272,23 +285,24 @@ def parseResultFile(name, resultFile):
 
 '''
 Takes rule file and rule names array as the input
-For every rule checks if we got any resul
+For every rule checks if we got any result
 '''
-def parseRulesFile(rulesFile, rulesWithResult):
-    #print(rulesFile, " : ", rulesWithResult)
+def parseRulesFile(rulesFile, predicateWithResult):
+    #print(rulesFile, " : ", predicateWithResult)
     exploredRules = set()
     with open(rulesFile, 'r') as fin:
         lines = fin.readlines()
         for line in lines:
             head = line.split(':')[0]
             body = line.split('-')[1]
-            rule = head.split('(')[0]
-            if rule in exploredRules:
+            predicate = head.split('(')[0]
+            if predicate in exploredRules:
                 continue
-            exploredRules.add(rule)
-            if rule in rulesWithResult:
+            exploredRules.add(predicate)
+            arity = head.count(',') + 1
+            if predicate in predicateWithResult:
                 print (head, "=>", body)
-                parseResultFile(rule, rulesWithResult[rule])
+                parseResultFile(predicate, predicateWithResult[predicate], arity)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run Query generation")
@@ -319,21 +333,21 @@ foutFeatures = open(outFile + '.features', 'w')
 foutGenFeatures = open(outFile + '.gen.features', 'w')
 foutQueryStats = open(outFile + '.query.stats', 'w')
 
-rulesWithResult = dict()
+predicateWithResult = dict()
 matDir = args.mat
 for root, dirs, files in os.walk(os.path.abspath(matDir)):
     for f in files:
         if not f.startswith('R'):
             continue
         ruleResultFilePath = os.path.join(root, f)
-        rulesWithResult[f] = ruleResultFilePath
+        predicateWithResult[f] = ruleResultFilePath
         resultFiles.append(ruleResultFilePath)
 
 queries = {}
 numQueries = 0
 globalMagicWon = 0
 start = time.time()
-parseRulesFile(rulesFile, rulesWithResult)
+parseRulesFile(rulesFile, predicateWithResult)
 runQueries(queries)
 end = time.time()
 
