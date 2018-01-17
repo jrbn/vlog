@@ -102,8 +102,10 @@ def checkAccuracy(fileName, column, threshold):
     #print ("Precision = ", precision)
     #print("Recall = ", recall)
     print("Accuracy on Test set = ", f1score*100)
-    print("Relative Accuracy (QSQR) = ", (float(qsqrGuess)/float(nQsqrQueries))*100)
-    print("Relative Accuracy (MAGIC) = ", (float(magicGuess)/float(nMagicQueries))*100)
+    if (nQsqrQueries != 0):
+        print("Relative Accuracy (QSQR) = ", (float(qsqrGuess)/float(nQsqrQueries))*100)
+    if (nMagicQueries != 0):
+        print("Relative Accuracy (MAGIC) = ", (float(magicGuess)/float(nMagicQueries))*100)
     return f1score
 
 def findThreshold(fileName, column):
