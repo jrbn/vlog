@@ -8,11 +8,9 @@ import time
 from collections import defaultdict
 from random import shuffle
 from subprocess import check_output, STDOUT, TimeoutExpired, CalledProcessError
+import functools
 
-STR_magic_time = "magic time ="
-STR_qsqr_time = "qsqr time ="
 STR_time = "query runtime ="
-#STR_rows = "#rows ="
 STR_vector = "Vector:"
 
 def generateQueries(rule, arity, resultRecords):
@@ -147,6 +145,7 @@ def runQueries(queries):
     global foutFeatures
     global foutGenFeatures
     global foutQueryStats
+    global TIMES
     for queryType in queries.keys():
         print ("Running queries of type : ", queryType)
         uniqueQueries = list(set(queries[queryType]))
@@ -158,23 +157,13 @@ def runQueries(queries):
         for q in uniqueQueries:
             print ("Iteration #", iterations, " : " , q)
             # Here invoke vlog and execute query and get the runtime
+
             workingTimeout = ARG_TIMEOUT
             winnerAlgorithm = "QSQR"
             timeQsqr = runQueryWithAlgo(q, "qsqr", STR_time, "msec", workingTimeout)
             if (float(timeQsqr) / 1000) + 1 < workingTimeout:
                 workingTimeout = (float(timeQsqr)/1000)+1
             timeMagic = runQueryWithAlgo(q, "magic", STR_time, "msec", workingTimeout)
-            vector_str = runQueryWithAlgo(q, "onlyMetrics", STR_vector, "\\n", ARG_TIMEOUT)
-            vector = vector_str.split(',')
-
-            if float(timeMagic) < float(timeQsqr):
-                winnerAlgorithm = "MAGIC"
-
-            allFeatures = []
-            for v in vector:
-                allFeatures.append(v)
-            allFeatures.append(winnerAlgorithm)
-
             if timeQsqr == timeMagic: #Means both timed out
                 print (" timed out ")
                 timeoutCount += 1
@@ -185,6 +174,33 @@ def runQueries(queries):
                     timedOutQueryStats += recordTimedout + "\n"
                     print("##### !!!! : ", recordTimedout)
                     continue
+            qsqrTimes = []
+            magicTimes = []
+            for i in range(TIMES):
+                workingTimeout = ARG_TIMEOUT
+                winnerAlgorithm = "QSQR"
+                timeQsqr = runQueryWithAlgo(q, "qsqr", STR_time, "msec", workingTimeout)
+                qsqrTimes.append(float(timeQsqr))
+                if (float(timeQsqr) / 1000) + 1 < workingTimeout:
+                    workingTimeout = (float(timeQsqr)/1000)+1
+                timeMagic = runQueryWithAlgo(q, "magic", STR_time, "msec", workingTimeout)
+                magicTimes.append(float(timeMagic))
+                print (i, ") QSQR = ", timeQsqr, " , Magic = ", timeMagic)
+
+            avgQsqrTime = functools.reduce(lambda x,y: x + y, qsqrTimes)/len(qsqrTimes)
+            avgMagicTime = functools.reduce(lambda x,y: x + y, magicTimes)/len(magicTimes)
+            print("Avg QSQR = ", avgQsqrTime, " Avg Magic = ", avgMagicTime)
+            vector_str = runQueryWithAlgo(q, "onlyMetrics", STR_vector, "\\n", ARG_TIMEOUT)
+            vector = vector_str.split(',')
+
+            if float(avgMagicTime) < float(avgQsqrTime):
+                winnerAlgorithm = "MAGIC"
+
+            allFeatures = []
+            for v in vector:
+                allFeatures.append(v)
+            allFeatures.append(winnerAlgorithm)
+
 
             numQueries += 1
 
@@ -194,9 +210,7 @@ def runQueries(queries):
                 cntMagicWon += 1
                 globalMagicWon += 1
 
-            record = str(q) + " " + str(queryType) + " " + str(timeQsqr) + " " + str(timeMagic) + " " + str(allFeatures)
-            foutQueryStats.write(record + "\n")
-            foutQueryStats.flush()
+            record = str(q) + " " + str(queryType) + " " + str(avgQsqrTime) + " " + str(avgMagicTime) + " " + str(allFeatures)
             print (record)
 
             if (queryType >= 101 and queryType <= 104):
@@ -217,6 +231,8 @@ def runQueries(queries):
                 featureRecord += "\n"
                 foutFeatures.write(featureRecord)
                 foutFeatures.flush()
+                foutQueryStats.write(record + "\n")
+                foutQueryStats.flush()
 
             iterations += 1
             #TODO: generate all the possible queries
@@ -311,6 +327,7 @@ def parse_args():
     parser.add_argument('--conf', type=str, required = True, help = 'Path to the configuration file')
     parser.add_argument('--nq', type=int, help = "Number of queries to be executed of each type", default = 30)
     parser.add_argument('--timeout', type=int, help = "Number of seconds to wait for long running vlog process", default = 15)
+    parser.add_argument('--repeat', type=int, help = "Number of times a query is to be executed", default = 5)
     parser.add_argument('--sample', type=int, help = "Number of lines to sample from the big materialized files", default = 5000)
     parser.add_argument('--bigfile', type=int, help = "Number of lines file should contain so as to be categorized as a big file", default = 10000)
     parser.add_argument('--out', type=str, help = 'Name of the query output file')
@@ -322,6 +339,7 @@ ARG_TIMEOUT = args.timeout
 ARG_SAMPLE = args.sample
 ARG_BIGFILE = args.bigfile
 ARG_NQ = args.nq
+TIMES = args.repeat
 resultFiles = []
 rulesFile = args.rules
 outFile = args.out

@@ -1,1 +1,1 @@
-python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/Claros_L.dlog --mat /var/scratch/uji300/vlog/materialization_claros_L --conf edb-claros.conf --out claros-test-queries.dat 2> claros-genq-mat-errs.out --timeout 600
+python generate-queries.py --rules ~/vlog/examples/rules/aaai2016/Claros_L.dlog --mat /var/scratch/uji300/vlog/materialization_claros_L --conf edb-claros.conf --out claros-test-queries.dat 2> claros-genq-mat-errs.out --timeout 600 --repeat 5 --nq 100
