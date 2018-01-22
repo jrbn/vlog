@@ -49,7 +49,7 @@ def getURI(uri):
             return uri
         prefx = uri[:uri.find(':')]
         if prefx not in prefixes:
-            print 'Prefix not found: ' + prefx + ', URI = ' + uri
+            print ('Prefix not found: ' + prefx + ', URI = ' + uri)
             raise Exception('Prefix not found: ')
         else:
             prefx = prefixes[prefx]
@@ -197,7 +197,7 @@ def parsePrefix(prefixes, prefix):
     uri = prefix[prefix.find(" ") + 2:-1]
     prefixes[id] = uri
 
-print 'Extracting rules and input from ' + sys.argv[1]
+print ('Extracting rules and input from ' + sys.argv[1])
 
 for line in open(sys.argv[1], 'r'):
     line = line.strip()
