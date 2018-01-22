@@ -106,7 +106,7 @@ def checkAccuracy(fileName, column, threshold):
         print("Relative Accuracy (QSQR) = ", (float(qsqrGuess)/float(nQsqrQueries))*100)
     if (nMagicQueries != 0):
         print("Relative Accuracy (MAGIC) = ", (float(magicGuess)/float(nMagicQueries))*100)
-    return f1score
+    return yPredicted, f1score
 
 def findThreshold(fileName, column):
     X = []
@@ -125,7 +125,9 @@ def findThreshold(fileName, column):
 
     threshold = -1
     maxAccuracy = 0.0
-    sortedX = sorted(X)
+    uniqX = set(X)
+    sortedX = sorted(list(uniqX))
+
     for i in  sortedX:
         hits = 0
         misses = 0
@@ -144,6 +146,7 @@ def findThreshold(fileName, column):
 
     return threshold, maxAccuracy
 
+
 args = parse_args()
 train = args.train_data
 test = args.test_data
@@ -158,15 +161,48 @@ columns = []
 for i in range(0,nFeatures):
     columns.append(i)
 
+predMap = {}
+
 predictions, accuracy = train_and_eval(train, test, columns, nFeatures, LogisticRegression())
 #print ("Overall accuracy = ", accuracy)
+predictionsFile = os.path.splitext(test)[0] + "-all-features.preds"
+predString = ""
+for p in predictions:
+    predString += str(p) + "\n"
+with open(predictionsFile, 'w') as fout:
+    fout.write(predString)
 
 #train_and_eval(train, test, [0], nFeatures, LinearRegression())
 
 print ("Individual feature wise accuracy: ")
+predLogs = []
 for i in range(6):
     thr, acc = findThreshold(train, i)
     print("===================================================================")
     print("Feature : ", COLUMNS[i], " =>  threshold = ", thr , " (Accuracy on Training set = ", acc , ")" )
-    checkAccuracy(test, i, thr)
+    predictions, accuracy = checkAccuracy(test, i, thr)
+    predMap[i] = (predictions, thr)
+    print("Total Magic predictions= ", predictions.count(0))
+    fout = open(os.path.splitext(test)[0]+'-feature'+str(i+1)+'.preds', 'w')
+    predLogs.append(fout)
 print("===================================================================")
+#exit(1)
+fout = open('logfile','w')
+with open(test, 'r') as fin:
+    for i,line in enumerate(fin.readlines()):
+        columns = line.split(',')
+        result = ""
+        for j in range(6):
+            predLogs[j].write(str(predMap[j][0][i])+"\n")
+            if (predMap[j][0][i] == 0):
+                result += "MAGIC"
+            else:
+                result += "QSQR"
+            result += "(" + str(predMap[j][1]) + ")"
+            if (j != 5):
+                result += ","
+        lr = line + "," + result + "\n"
+        fout.write (lr)
+fout.close()
+for pl in predLogs:
+    pl.close()
