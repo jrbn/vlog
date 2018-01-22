@@ -974,7 +974,6 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
     int nVars = literal.getNVars();
     bool onlyVars = nVars > 0;
 
-    int times = vm["repeatQuery"].as<int>();
     int timeout = vm["timeoutLiteral"].as<int>();
 
     boost::chrono::system_clock::time_point startQ1 = boost::chrono::system_clock::now();
@@ -1027,23 +1026,7 @@ double runAlgo(string algo, Literal &literal, EDBLayer &edb, Program &p, Reasone
 
     delete iter;
 
-    if (times > 0) {
-        // Redirect output
-        boost::chrono::system_clock::time_point startQ = boost::chrono::system_clock::now();
-        for (int j = 0; j < times; j++) {
-            TupleIterator *iter = reasoner.getIterator(literal, NULL, NULL, edb, p, true, NULL);
-            int sz = iter->getTupleSize();
-            while (iter->hasNext()) {
-                iter->next();
-            }
-        }
-        boost::chrono::duration<double> durationQ = boost::chrono::system_clock::now() - startQ;
-
-        BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-        BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", repeated query runtime = " << (durationQ.count() / times) * 1000 << " milliseconds";
-    } else {
-        BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
-    }
+    BOOST_LOG_TRIVIAL(info) << "Algo = " << algo << ", query runtime = " << (durationQ1.count() * 1000) << " msec, #rows = " << count;
     return (durationQ1.count() * 1000);
 }
 
@@ -1314,7 +1297,6 @@ int main(int argc, const char** argv) {
         for (int i = 0; i < nQueries; ++i) {
             vector<double> data;
             int label;
-            int timeout = vm["timeoutLiteral"].as<int>();
             BOOST_LOG_TRIVIAL(info) << i << "/" << nQueries;
             BOOST_LOG_TRIVIAL(info) << "Query : " << trainingQueries[i].first;
             std::string query = trainingQueries[i].first;
@@ -1323,6 +1305,7 @@ int main(int argc, const char** argv) {
             Metrics m;
             reasoner.getMetrics(literal, NULL, NULL, *layer, p, m, maxDepth);
 
+            int timeout = vm["timeoutLiteral"].as<int>();
             std::string algorithm = "qsqr";
             std::string newCommand(argv[0]);
             char *const args [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
@@ -1355,11 +1338,54 @@ int main(int argc, const char** argv) {
                 continue;
             }
 
+            int times = vm["repeatQuery"].as<int>();
+            double avgQsqrTime = qsqrTime;
+            double avgMagicTime = magicTime;
+            // Here, we are sure that not both queries have timed out
+            if (times > 1) {
+                vector<double> qsqrTimes;
+                vector<double>magicTimes;
+                for (int j = 0; j < times; ++j) {
+                    int timeout = vm["timeoutLiteral"].as<int>();
+                    std::string algorithm = "qsqr";
+                    std::string newCommand(argv[0]);
+                    char *const args [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
+                    std::string qsqrOut = executeCommand(argv[0], args, timeout);
+
+                    double qsqrTime = timeout*1000;
+                    if (qsqrOut != "TIMEDOUT") {
+                        qsqrTime = parseOutput(qsqrOut);
+                        if ((int)((qsqrTime/1000) + 1.0) < timeout) {
+                            timeout = (qsqrTime/1000) + 1.0;
+                        }
+                    }
+                    BOOST_LOG_TRIVIAL(info) << j << ") QSQR time = " << qsqrTime;
+                    qsqrTimes.push_back(qsqrTime);
+                    algorithm = "magic";
+                    char * const args2 [] = {const_cast<char*>(argv[0]), "queryLiteral", "-e", const_cast<char*>(edbFile.c_str()), "--rule", const_cast<char*>(rulesFile.c_str()), "--reasoningAlgo", const_cast<char*>(algorithm.c_str()), "-l", "info", "--printValues", "0", "-q", const_cast<char*>(query.c_str()), NULL};
+                    std::string magicOut = executeCommand(argv[0], args2, timeout);
+                    double magicTime = timeout*1000;
+                    if (magicOut != "TIMEDOUT") {
+                        magicTime = parseOutput(magicOut);
+                    }
+                    BOOST_LOG_TRIVIAL(info) << j <<") MAGIC time = " << magicTime;
+                    magicTimes.push_back(magicTime);
+                }// for repeatQuery N times
+
+                avgQsqrTime = accumulate(qsqrTimes.begin(), qsqrTimes.end(), 0.0)/qsqrTimes.size();
+                avgMagicTime = accumulate(magicTimes.begin(), magicTimes.end(), 0.0)/magicTimes.size();
+                BOOST_LOG_TRIVIAL(info) << "Avg QSQR time = " << avgQsqrTime << "  Avg Magic time = " << avgMagicTime;
+                std::string winnerAlgo = "QSQR";
+                if (avgMagicTime < avgQsqrTime) {
+                    winnerAlgo = "MAGIC";
+                }
+            }// if repeatQuery > 1
+
             if (winnerAlgo == "MAGIC") {
                 magicSetQueriesLog << query << ", "
                 << m.cost << ", " << m.estimate << ", " << m.countRules << ", " << m.countUniqueRules << ","
                 << m.countIntermediateQueries << ", " <<
-                m.countIDBPredicates << ", " << winnerAlgo << " QSQR time = " << qsqrTime << " Magic time = " << magicTime << std::endl;
+                m.countIDBPredicates << ", " << winnerAlgo << " QSQR time = " << avgQsqrTime << " Magic time = " << avgMagicTime << std::endl;
             }
             BOOST_LOG_TRIVIAL(info) << m.estimate << ", " << m.cost << ", " << m.countRules << ", " << m.countIntermediateQueries << ", " << m.countUniqueRules << " , " << m.countIDBPredicates << "," <<  winnerAlgo << std::endl;
             if (queryType < 101 || queryType > 104) {
@@ -1375,7 +1401,7 @@ int main(int argc, const char** argv) {
             allQueriesLog << query << ", "
             << m.cost << ", " << m.estimate << ", " << m.countRules << ", " << m.countUniqueRules << ","
             << m.countIntermediateQueries << ", " <<
-            m.countIDBPredicates << ", " << winnerAlgo << ",QSQR time = " << qsqrTime << ",Magic time = " << magicTime << std::endl;
+            m.countIDBPredicates << ", " << winnerAlgo << ",QSQR time = " << avgQsqrTime << ",Magic time = " << avgMagicTime<< std::endl;
 
             data.push_back(m.cost);
             data.push_back(m.estimate);
