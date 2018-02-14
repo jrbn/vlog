@@ -1,3 +1,4 @@
+#if MYSQL
 #include <vlog/mysql/mysqltable.h>
 #include <vlog/mysql/mysqliterator.h>
 
@@ -75,13 +76,13 @@ void MySQLTable::query(QSQQuery *query, TupleTable *outputTable,
 	    sqlCreateTable += ")";
 	    sql::Statement *stmt;
 	    stmt = con->createStatement();
-	    BOOST_LOG_TRIVIAL(debug) << "SQL create temp table: " << sqlCreateTable;
+	    LOG(DEBUGL) << "SQL create temp table: " << sqlCreateTable;
 	    MYSQLCALL(stmt->execute(sqlCreateTable))
 	    delete stmt;
 
 	    // Insert values into table
 	    stmt = con->createStatement();
-	    BOOST_LOG_TRIVIAL(debug) << "START TRANSACTION";
+	    LOG(DEBUGL) << "START TRANSACTION";
 	    stmt->execute("START TRANSACTION");
 	    delete stmt;
 
@@ -93,14 +94,14 @@ void MySQLTable::query(QSQQuery *query, TupleTable *outputTable,
 		    addition += pref + to_string(*itr);
 		}
 		addition += ")";
-		BOOST_LOG_TRIVIAL(debug) << "SQL insert into temp table: " << addition;
+		LOG(DEBUGL) << "SQL insert into temp table: " << addition;
 		stmt = con->createStatement();
 		stmt->execute(addition);
 		delete stmt;
 	    }
 
 	    stmt = con->createStatement();
-	    BOOST_LOG_TRIVIAL(debug) << "COMMIT";
+	    LOG(DEBUGL) << "COMMIT";
 	    stmt->execute("COMMIT");
 	    delete stmt;
 	    
@@ -113,7 +114,7 @@ void MySQLTable::query(QSQQuery *query, TupleTable *outputTable,
 	    }
 	    sqlCreateTable += ")";
 	    stmt = con->createStatement();
-	    BOOST_LOG_TRIVIAL(debug) << "alter table: add primary key";
+	    LOG(DEBUGL) << "alter table: add primary key";
 	    stmt->execute(sqlCreateTable);
 	    delete stmt;
 
@@ -163,14 +164,32 @@ void MySQLTable::query(QSQQuery *query, TupleTable *outputTable,
     }
     iter->clear();
     delete iter;
-    BOOST_LOG_TRIVIAL(debug) << "query gave " << count << " results";
+    LOG(DEBUGL) << "query gave " << count << " results";
 
     if (valuesToFilter != NULL && valuesToFilter->size() > TEMP_TABLE_THRESHOLD) {
 	sql::Statement *stmt = con->createStatement();
-	BOOST_LOG_TRIVIAL(debug) << "DROP TABLE temp";
+	LOG(DEBUGL) << "DROP TABLE temp";
 	stmt->execute("DROP TABLE temp");
 	delete stmt;
     }
+}
+
+uint64_t MySQLTable::getSize() {
+
+    string query = "SELECT COUNT(*) as c from " + tablename;
+
+    LOG(DEBUGL) << "SQL Query: " << query;
+
+    sql::Statement *stmt;
+    stmt = con->createStatement();
+    sql::ResultSet *res = stmt->executeQuery(query);
+    uint64_t result = 0;
+    if (res->first()) {
+        result = res->getInt(1);
+    }
+    delete res;
+    delete stmt;
+    return result;
 }
 
 size_t MySQLTable::getCardinality(const Literal &q) {
@@ -188,7 +207,7 @@ size_t MySQLTable::getCardinality(const Literal &q) {
     if (res->first()) {
         card = res->getInt(1);
     }
-    BOOST_LOG_TRIVIAL(debug) << "SQL Query: " << query << ", Cardinality = " << card;
+    LOG(DEBUGL) << "SQL Query: " << query << ", Cardinality = " << card;
     delete res;
     delete stmt;
     return card;
@@ -210,7 +229,7 @@ size_t MySQLTable::getCardinalityColumn(const Literal &q, uint8_t posColumn) {
     if (res->first()) {
         card = res->getInt(1);
     }
-    BOOST_LOG_TRIVIAL(debug) << "SQL Query: " << query << ", cardinalityColumn = " << card;
+    LOG(DEBUGL) << "SQL Query: " << query << ", cardinalityColumn = " << card;
     delete res;
     delete stmt;
     return card;
@@ -245,7 +264,7 @@ bool MySQLTable::isEmpty(const Literal &q, std::vector<uint8_t> *posToFilter,
     if (res->first()) {
 	card = res->getInt(1);
     }
-    BOOST_LOG_TRIVIAL(debug) << "SQL Query: " << query << ", in isEmpty, cardinality = " << card;
+    LOG(DEBUGL) << "SQL Query: " << query << ", in isEmpty, cardinality = " << card;
     delete res;
     delete stmt;
     return card == 0;
@@ -271,7 +290,7 @@ bool MySQLTable::getDictNumber(const char *text, const size_t sizeText,
         id = res->getUInt64(1);
         resp = true;
     }
-    //BOOST_LOG_TRIVIAL(debug) << "Value=" << string(text, sizeText) << " ID=" << id;
+    //LOG(DEBUGL) << "Value=" << string(text, sizeText) << " ID=" << id;
     delete res;
     delete stmt;
     return resp;
@@ -308,3 +327,4 @@ uint64_t MySQLTable::getNTerms() {
     delete stmt;
     return card;
 }
+#endif

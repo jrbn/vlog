@@ -15,9 +15,9 @@
     try { \
 	stat; \
     } catch (sql::SQLException &e) { \
-       BOOST_LOG_TRIVIAL(warning) << "# ERR: SQLException in " << __FILE__ \
+       LOG(WARNL) << "# ERR: SQLException in " << __FILE__ \
 	   << "(" << __FUNCTION__ << ") on line " << __LINE__; \
-       BOOST_LOG_TRIVIAL(warning) << "# ERR: " << e.what() \
+       LOG(WARNL) << "# ERR: " << e.what() \
 	   << " (MySQL error code: " << e.getErrorCode() \
 	   << ", SQLState: " << e.getSQLState() << " )"; \
 	exit(1); \
@@ -54,6 +54,8 @@ public:
     bool getDictText(const uint64_t id, char *text);
 
     uint64_t getNTerms();
+
+    uint64_t getSize();
 
     ~MySQLTable() {
         if (con) {
