@@ -1,3 +1,4 @@
+#if MAPI
 #include <vlog/mapi/mapitable.h>
 #include <vlog/mapi/mapiiterator.h>
 
@@ -67,6 +68,26 @@ MAPITable::MAPITable(string host, int port, string user, string pwd, string dbna
     }
 }
 
+uint64_t MAPITable::getSize() {
+
+    string query = "SELECT COUNT(*) as c from " + tablename;
+
+    std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
+
+    MapiHdl handle = doquery(con, query);
+    mapi_fetch_row(handle);
+    char *res = mapi_fetch_field(handle, 0);
+    char *p;
+    size_t result = strtol(res, &p, 10);
+    mapi_close_handle(handle);
+
+    std::chrono::duration<double> sec = std::chrono::system_clock::now() - start;
+
+    LOG(DEBUGL) << "SQL Query (getSize): " << query << " took " << sec.count();
+
+    return result;
+}
+
 // If valuesToFilter is larger than this, use a temporary table instead of a test on the individual values
 #define TEMP_TABLE_THRESHOLD (2*3*4*5*7*11)
 
@@ -124,11 +145,11 @@ void MAPITable::query(QSQQuery *query, TupleTable *outputTable,
 	    }
 	    sqlCreateTable += ")";
 	    sqlCreateTable += ")";
-	    BOOST_LOG_TRIVIAL(debug) << "SQL create temp table: " << sqlCreateTable;
+	    LOG(DEBUGL) << "SQL create temp table: " << sqlCreateTable;
 	    update(con, sqlCreateTable);
 
 	    // Insert values into table
-	    BOOST_LOG_TRIVIAL(debug) << "START TRANSACTION";
+	    LOG(DEBUGL) << "START TRANSACTION";
 	    update(con, "START TRANSACTION");
 
 	    for (std::vector<Term_t>::iterator itr = valuesToFilter->begin();
@@ -139,11 +160,11 @@ void MAPITable::query(QSQQuery *query, TupleTable *outputTable,
 		    addition += pref + to_string(*itr);
 		}
 		addition += ")";
-		BOOST_LOG_TRIVIAL(debug) << "SQL insert into temp table: " << addition;
+		LOG(DEBUGL) << "SQL insert into temp table: " << addition;
 		update(con, addition);
 	    }
 
-	    BOOST_LOG_TRIVIAL(debug) << "COMMIT";
+	    LOG(DEBUGL) << "COMMIT";
 	    update(con, "COMMIT");
 	    
 	    /*
@@ -155,7 +176,7 @@ void MAPITable::query(QSQQuery *query, TupleTable *outputTable,
 		sqlCreateTable += "x" + to_string(i);
 	    }
 	    sqlCreateTable += ")";
-	    BOOST_LOG_TRIVIAL(debug) << "alter table: add primary key: " << sqlCreateTable;
+	    LOG(DEBUGL) << "alter table: add primary key: " << sqlCreateTable;
 	    update(con, sqlCreateTable);
 	    */
 
@@ -205,10 +226,10 @@ void MAPITable::query(QSQQuery *query, TupleTable *outputTable,
     }
     iter->clear();
     delete iter;
-    BOOST_LOG_TRIVIAL(debug) << "query gave " << count << " results";
+    LOG(DEBUGL) << "query gave " << count << " results";
 
     if (valuesToFilter != NULL && valuesToFilter->size() > TEMP_TABLE_THRESHOLD) {
-	BOOST_LOG_TRIVIAL(debug) << "DROP TABLE temp";
+	LOG(DEBUGL) << "DROP TABLE temp";
 	update(con, "DROP TABLE temp");
     }
 }
@@ -221,7 +242,7 @@ size_t MAPITable::getCardinality(const Literal &q) {
         query += " WHERE " + cond;
     }
 
-    BOOST_LOG_TRIVIAL(debug) << "SQL Query: " << query;
+    std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
 
     MapiHdl handle = doquery(con, query);
     mapi_fetch_row(handle);
@@ -229,6 +250,10 @@ size_t MAPITable::getCardinality(const Literal &q) {
     char *p;
     size_t result = strtol(res, &p, 10);
     mapi_close_handle(handle);
+
+    std::chrono::duration<double> sec = std::chrono::system_clock::now() - start;
+
+    LOG(DEBUGL) << "SQL Query (getCardinality): " << query << " took " << sec.count();
 
     return (size_t) result;
 }
@@ -242,13 +267,18 @@ size_t MAPITable::getCardinalityColumn(const Literal &q, uint8_t posColumn) {
         query += " WHERE " + cond;
     }
 
-    BOOST_LOG_TRIVIAL(debug) << "SQL Query: " << query;
+    std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
+
     MapiHdl handle = doquery(con, query);
     mapi_fetch_row(handle);
     char *res = mapi_fetch_field(handle, 0);
     char *p;
     size_t result = strtol(res, &p, 10);
     mapi_close_handle(handle);
+
+    std::chrono::duration<double> sec = std::chrono::system_clock::now() - start;
+
+    LOG(DEBUGL) << "SQL Query (getCardinalityColumn): " << query << " took " << sec.count();
 
     return (size_t) result;
 }
@@ -275,7 +305,7 @@ bool MAPITable::isEmpty(const Literal &q, std::vector<uint8_t> *posToFilter,
 	query += " WHERE " + cond;
     }
 
-    BOOST_LOG_TRIVIAL(debug) << "SQL Query: " << query;
+    std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
 
     MapiHdl handle = doquery(con, query);
     mapi_fetch_row(handle);
@@ -283,6 +313,10 @@ bool MAPITable::isEmpty(const Literal &q, std::vector<uint8_t> *posToFilter,
     char *p;
     size_t result = strtol(res, &p, 10);
     mapi_close_handle(handle);
+
+    std::chrono::duration<double> sec = std::chrono::system_clock::now() - start;
+
+    LOG(DEBUGL) << "SQL Query (isEmpty): " << query << " took " << sec.count();
 
     return result == 0;
 }
@@ -338,3 +372,4 @@ uint64_t MAPITable::getNTerms() {
 MAPITable::~MAPITable() {
     mapi_destroy(con);
 }
+#endif

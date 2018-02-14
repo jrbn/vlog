@@ -17,34 +17,34 @@ bool VLogLayer::lookup(const std::string& text,
         resp = edb.getDictNumber(uri.c_str(), uri.size(), longId);
     } else {
         resp = edb.getDictNumber(text.c_str(), text.size(), longId);
-	if (! resp) {
-	    string tp = "";
-	    switch(type) {
-	    case ::Type::ID::String:
-		tp = "http://www.w3.org/2001/XMLSchema#string";
-		break;
-	    case ::Type::ID::Integer:
-		tp = "http://www.w3.org/2001/XMLSchema#integer";
-		break;
-	    case ::Type::ID::Decimal:
-		tp = "http://www.w3.org/2001/XMLSchema#decimal";
-		break;
-	    case ::Type::ID::Double:
-		tp = "http://www.w3.org/2001/XMLSchema#double";
-		break;
-	    case ::Type::ID::Boolean:
-		tp = "http://www.w3.org/2001/XMLSchema#boolean";
-		break;
-	    case ::Type::ID::Date:
-		tp = "http://www.w3.org/2001/XMLSchema#date";
-		break;
-	    default:
-		// TODO?
-		break;
-	    }
-	    string txt = "\"" + text + "\"^^<" + tp + ">";
-	    resp = edb.getDictNumber(txt.c_str(), txt.size(), longId);
-	}
+        if (! resp) {
+            string tp = "";
+            switch(type) {
+                case ::Type::ID::String:
+                    tp = "http://www.w3.org/2001/XMLSchema#string";
+                    break;
+                case ::Type::ID::Integer:
+                    tp = "http://www.w3.org/2001/XMLSchema#integer";
+                    break;
+                case ::Type::ID::Decimal:
+                    tp = "http://www.w3.org/2001/XMLSchema#decimal";
+                    break;
+                case ::Type::ID::Double:
+                    tp = "http://www.w3.org/2001/XMLSchema#double";
+                    break;
+                case ::Type::ID::Boolean:
+                    tp = "http://www.w3.org/2001/XMLSchema#boolean";
+                    break;
+                case ::Type::ID::Date:
+                    tp = "http://www.w3.org/2001/XMLSchema#date";
+                    break;
+                default:
+                    // TODO?
+                    break;
+            }
+            string txt = "\"" + text + "\"^^<" + tp + ">";
+            resp = edb.getDictNumber(txt.c_str(), txt.size(), longId);
+        }
     }
 
     if (resp)
@@ -72,6 +72,17 @@ bool VLogLayer::lookupById(uint64_t id,
     }
     return false;
 }
+
+bool VLogLayer::lookupById(uint64_t id,
+        char* start,
+        size_t &len,
+        ::Type::ID& type,
+        unsigned& subType) {
+    LOG(ERRORL) << "Not implemented yet";
+    throw 10;
+}
+
+
 
 uint64_t VLogLayer::getNextId() {
     return edb.getNTerms() + 1;
@@ -238,7 +249,7 @@ double VLogLayer::getScanCost(DBLayer::DataOrder order,
 
 #ifdef DEBUG
     Literal query(Predicate(predQueries, Predicate::calculateAdornment(tuple)), tuple);
-    BOOST_LOG_TRIVIAL(debug) << "Literal: " << query.tostring(&(this->p), &edb) << ", cost = " << cost;
+    LOG(DEBUGL) << "Literal: " << query.tostring(&(this->p), &edb) << ", cost = " << cost;
 #endif
     return cost;
 }
@@ -324,7 +335,7 @@ double VLogLayer::getJoinSelectivity(bool value1L,
         }
         // Same variables, so resulting cardinality not higher than smallest one.
         double retval = cardl < cardr ? cardl/max : cardr/max;
-        BOOST_LOG_TRIVIAL(debug) << "joinselectivity = " << retval;
+        LOG(DEBUGL) << "joinselectivity = " << retval;
         return retval;
     }
 
@@ -350,7 +361,7 @@ uint64_t VLogLayer::getCardinality(VTuple tuple) {
     auto got = idbCardinalities.find(tuple);
     double costImplicit;
     Literal idbquery(Predicate(predQueries,
-                     Predicate::calculateAdornment(tuple)), tuple);
+                Predicate::calculateAdornment(tuple)), tuple);
 
     if (got == idbCardinalities.end()) {
         costImplicit = reasoner.estimate(idbquery, NULL, NULL, edb, this->p);

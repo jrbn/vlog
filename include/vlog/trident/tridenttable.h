@@ -5,11 +5,9 @@
 #include <vlog/column.h>
 #include <vlog/edbtable.h>
 
-#include <boost/thread/mutex.hpp>
 
 #include <trident/kb/kb.h>
 #include <trident/kb/querier.h>
-//#include <trident/binarytables/binarytable.h>
 #include <kognac/factory.h>
 
 class SeqColumnWriter : public SequenceWriter {
@@ -32,7 +30,7 @@ private:
     Querier *q;
     DictMgmt *dict;
     Factory<TridentIterator> kbItrFactory;
-    boost::mutex mutex;
+    std::mutex mutex;
     bool multithreaded;
 
     TridentIterator *getTridentIter();
@@ -124,6 +122,8 @@ public:
     bool getDictText(const uint64_t id, char *text);
 
     uint64_t getNTerms();
+
+    uint64_t getSize();
 
     void releaseIterator(EDBIterator *itr);
 
